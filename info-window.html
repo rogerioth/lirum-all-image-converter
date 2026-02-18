@@ -6,15 +6,19 @@
   <title>Lirum - Image Info</title>
   <link rel="stylesheet" href="styles.css">
   <style>
+    html, body {
+      height: 100%;
+    }
+
     body {
-      height: 100vh;
       overflow: hidden;
     }
 
     .info-window {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      height: 100%;
+      min-height: 0;
       background: var(--bg-primary);
     }
 
@@ -61,12 +65,13 @@
     }
 
     .info-content {
-      flex: 1;
-      overflow-y: auto;
+      min-height: 0;
+      overflow: auto;
       padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
+      display: grid;
+      grid-auto-rows: min-content;
+      row-gap: 14px;
+      align-content: start;
       background: var(--bg-primary);
     }
 
@@ -171,6 +176,101 @@
       color: var(--text-tertiary);
       font-size: 0.75rem;
     }
+
+
+    .info-window,
+    .info-content,
+    .info-section,
+    .info-table,
+    .info-row,
+    .info-value {
+      min-width: 0;
+    }
+
+    .info-window {
+      min-height: 0;
+    }
+
+    .info-content {
+      min-height: 0;
+      overflow: auto;
+      scrollbar-gutter: stable;
+      overscroll-behavior: contain;
+    }
+
+    .info-table {
+      width: 100%;
+    }
+
+    .info-row {
+      grid-template-columns: minmax(160px, 240px) minmax(0, 1fr);
+      align-items: stretch;
+    }
+
+    .info-label {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .info-value {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      line-height: 1.35;
+    }
+
+    .info-toolbar {
+      flex-wrap: wrap;
+      row-gap: 10px;
+    }
+
+    .info-actions {
+      flex-wrap: wrap;
+    }
+
+    .info-search {
+      flex: 1 1 220px;
+    }
+
+    .info-search input {
+      width: min(320px, 60vw);
+      max-width: 100%;
+    }
+
+
+    .info-row:nth-child(even) {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .info-row:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    @media (max-width: 760px) {
+      .info-row {
+        grid-template-columns: 1fr;
+      }
+
+      .info-label {
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg-tertiary);
+      }
+
+      .info-value {
+        padding-top: 8px;
+      }
+
+      .info-actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+
+      .info-search input {
+        width: 100%;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -182,7 +282,7 @@
       </div>
       <div class="info-actions">
         <div class="info-search">
-          <input type="text" id="infoSearch" placeholder="Filter metadata...">
+          <input type="text" id="infoSearch" placeholder="Filter metadata..." autocomplete="off" spellcheck="false">
         </div>
       </div>
     </div>

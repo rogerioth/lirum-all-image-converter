@@ -29,7 +29,7 @@ const qualityValue = document.getElementById('qualityValue');
 const processingOverlay = document.getElementById('processingOverlay');
 
 // Modal Elements
-const menuBtn = document.getElementById('menuBtn');
+
 const menuModal = document.getElementById('menuModal');
 const closeMenu = document.getElementById('closeMenu');
 const viewLogsBtn = document.getElementById('viewLogsBtn');
@@ -159,8 +159,11 @@ convertBtn.addEventListener('click', () => {
   convertImage(selectedFormat.format, selectedFormat.mime);
 });
 
+// Format Settings Close Button
+const closeFormatSettings = document.getElementById('closeFormatSettings');
+closeFormatSettings.addEventListener('click', clearFormatSelection);
+
 // Modal Event Listeners
-menuBtn.addEventListener('click', () => openModal(menuModal));
 closeMenu.addEventListener('click', closeActiveModal);
 viewLogsBtn.addEventListener('click', () => {
   closeActiveModal();
@@ -179,7 +182,10 @@ closeAbout.addEventListener('click', closeActiveModal);
 closeConversionComplete.addEventListener('click', closeActiveModal);
 
 if (viewInfoBtn) {
-  viewInfoBtn.addEventListener('click', openInfoWindow);
+  viewInfoBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openInfoWindow();
+  });
 }
 
 // Conversion complete actions

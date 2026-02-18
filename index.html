@@ -15,13 +15,6 @@
           <h1>Lirum All Image Converter</h1>
           <p class="subtitle">Drag & drop your image to convert</p>
         </div>
-        <button class="menu-btn" id="menuBtn" title="Open Menu">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="3" y1="12" x2="21" y2="12"/>
-            <line x1="3" y1="6" x2="21" y2="6"/>
-            <line x1="3" y1="18" x2="21" y2="18"/>
-          </svg>
-        </button>
       </div>
       <div class="supported-formats">
         <span class="format-tag">WebP</span>
@@ -191,7 +184,15 @@
               <p class="format-settings-title">Selected</p>
               <h3 id="selectedFormatName">Format</h3>
             </div>
-            <span class="format-settings-ext" id="selectedFormatExt">.ext</span>
+            <div class="format-settings-header-right">
+              <span class="format-settings-ext" id="selectedFormatExt">.ext</span>
+              <button class="format-settings-close" id="closeFormatSettings" title="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
           </div>
           <div class="quality-control" id="qualityControl" hidden>
             <label id="qualityLabel" for="quality">

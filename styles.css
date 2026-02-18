@@ -555,6 +555,38 @@ body {
   gap: 12px;
 }
 
+.format-settings-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.format-settings-close {
+  width: 28px;
+  height: 28px;
+  padding: 4px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.format-settings-close:hover {
+  background: var(--bg-elevated);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.format-settings-close svg {
+  width: 16px;
+  height: 16px;
+}
+
 .format-settings-title {
   font-size: 0.65rem;
   text-transform: uppercase;

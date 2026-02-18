@@ -152,8 +152,8 @@ function render(payload) {
   infoFileName.textContent = payload.file?.name || 'Image Info';
   infoTimestamp.textContent = payload.generatedAt ? new Date(payload.generatedAt).toLocaleString() : '';
 
-  const fileItems = filterItems(formatFileSection(payload.file), searchTerm);
-  const imageItems = filterItems(formatImageSection(payload.image), searchTerm);
+  const fileItems = formatFileSection(payload.file);
+  const imageItems = formatImageSection(payload.image);
 
   let metadataItems = payload.metadata?.entries || [];
   if (searchTerm) {
@@ -181,8 +181,9 @@ function render(payload) {
       { label: 'Status', value: payload.metadataError }
     ]));
   } else if (metadataSections.length === 0) {
+    const emptyMessage = searchTerm ? 'No metadata matched your filter.' : 'No metadata tags were found.';
     sections.push(renderSection('Metadata', [
-      { label: 'Status', value: 'No metadata tags were found.' }
+      { label: 'Status', value: emptyMessage }
     ]));
   } else {
     metadataSections.forEach((section) => {
@@ -205,8 +206,13 @@ infoSearch.addEventListener('input', () => {
 });
 
 ipcRenderer.on('info-window-data', (event, payload) => {
+  const previousName = currentPayload?.file?.name;
   currentPayload = payload;
+  if (payload?.file?.name && payload.file.name !== previousName) {
+    infoSearch.value = '';
+  }
   render(currentPayload);
+  infoContent.scrollTop = 0;
 });
 
 document.addEventListener('DOMContentLoaded', () => {
