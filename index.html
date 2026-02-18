@@ -53,6 +53,16 @@
         <div class="preview-container" id="previewContainer" hidden>
           <img id="previewImage" alt="Preview">
           <div class="image-info" id="imageInfo"></div>
+          <div class="preview-actions">
+            <button class="info-btn" id="viewInfoBtn" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+              Image Info
+            </button>
+          </div>
         </div>
         
         <!-- Processing Overlay -->
@@ -61,29 +71,67 @@
           <p class="processing-text" id="processingText">Processing...</p>
         </div>
       </div>
-
       <!-- Format Panel -->
       <aside class="format-panel">
-        <h2>Convert to</h2>
-        <div class="format-options">
-          <button class="format-btn" data-format="jpeg" data-mime="image/jpeg" disabled>
-            <span class="format-icon">JPG</span>
-            <span class="format-name">JPEG</span>
-            <span class="format-desc">Best for photos</span>
+        <div class="format-panel-header">
+          <h2>Convert to</h2>
+          <p class="format-panel-subtitle">Pick a target format to see options.</p>
+        </div>
+        <div class="format-grid" id="formatGrid">
+          <button class="format-card" data-format="jpeg" data-mime="image/jpeg" data-extension="jpg" data-quality="true" data-quality-label="JPEG Quality" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">JPG</span>
+              <span class="format-chip loss">Lossy</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">JPEG</span>
+              <span class="format-desc">Small files, best for photos</span>
+            </div>
           </button>
-          <button class="format-btn" data-format="png" data-mime="image/png" disabled>
-            <span class="format-icon">PNG</span>
-            <span class="format-name">PNG</span>
-            <span class="format-desc">Lossless quality</span>
+          <button class="format-card" data-format="png" data-mime="image/png" data-extension="png" data-quality="false" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">PNG</span>
+              <span class="format-chip lossless">Lossless</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">PNG</span>
+              <span class="format-desc">Great for graphics and transparency</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="webp" data-mime="image/webp" data-extension="webp" data-quality="true" data-quality-label="WebP Quality" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">WEBP</span>
+              <span class="format-chip modern">Modern</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">WebP</span>
+              <span class="format-desc">Balanced size and quality</span>
+            </div>
           </button>
         </div>
-        <div class="quality-control" id="qualityControl" hidden>
-          <label for="quality">JPEG Quality: <span id="qualityValue">90%</span></label>
-          <input type="range" id="quality" min="10" max="100" value="90">
-          <div class="quality-labels">
-            <span>Smaller</span>
-            <span>Better</span>
+        <div class="format-settings" id="formatSettings" hidden>
+          <div class="format-settings-header">
+            <div>
+              <p class="format-settings-title">Selected</p>
+              <h3 id="selectedFormatName">Format</h3>
+            </div>
+            <span class="format-settings-ext" id="selectedFormatExt">.ext</span>
           </div>
+          <div class="quality-control" id="qualityControl" hidden>
+            <label id="qualityLabel" for="quality">
+              <span id="qualityLabelText">Quality</span>
+              <span id="qualityValue">90%</span>
+            </label>
+            <input type="range" id="quality" min="10" max="100" value="90">
+            <div class="quality-labels">
+              <span>Smaller</span>
+              <span>Better</span>
+            </div>
+          </div>
+          <div class="format-setting-note" id="noSettingsNote" hidden>
+            No additional settings for this format.
+          </div>
+          <button class="convert-btn" id="convertBtn" disabled>Convert</button>
         </div>
         
         <div class="decoder-info">
@@ -95,7 +143,7 @@
     <!-- Status Bar -->
     <footer class="status-bar">
       <span id="statusText">Ready</span>
-      <span class="shortcut-hint">ESC: Reset | Ctrl/Cmd+O: Open | Ctrl/Cmd+L: Logs</span>
+      <span class="shortcut-hint">ESC: Reset | Ctrl/Cmd+O: Open | Ctrl/Cmd+I: Info | Ctrl/Cmd+L: Logs</span>
     </footer>
   </div>
 
@@ -121,6 +169,19 @@
             <span class="menu-text">
               <span class="menu-label">View Logs</span>
               <span class="menu-shortcut">Ctrl/Cmd + L</span>
+            </span>
+          </button>
+          <button class="menu-item" id="viewInfoMenuBtn">
+            <span class="menu-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span>
+            <span class="menu-text">
+              <span class="menu-label">Image Info</span>
+              <span class="menu-shortcut">Ctrl/Cmd + I</span>
             </span>
           </button>
           <button class="menu-item" id="aboutBtn">
@@ -207,7 +268,7 @@
           <div class="about-card">
             <h4>Supported Formats</h4>
             <p><span class="about-label">Input:</span> WebP, HEIC, AVIF, PNG, JPG, GIF, BMP</p>
-            <p><span class="about-label">Output:</span> JPEG, PNG</p>
+            <p><span class="about-label">Output:</span> JPEG, PNG, WebP</p>
           </div>
           <div class="about-card">
             <h4>Menu Shortcuts</h4>

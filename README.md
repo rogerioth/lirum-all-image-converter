@@ -6,7 +6,7 @@ A simple, lightweight desktop application for converting images between differen
 
 - **Drag & Drop Interface**: Simply drop an image onto the app to begin conversion
 - **WebAssembly HEIC/AVIF Support**: Decode Apple HEIC/HEIF and AVIF images using libheif-js WebAssembly
-- **Quality Control**: Adjustable JPEG quality slider (10-100%)
+- **Quality Control**: Adjustable JPEG/WebP quality slider (10-100%)
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **No External Dependencies**: Uses built-in browser Canvas API and WebAssembly for image processing
 - **Privacy Focused**: All processing happens locally on your machine
@@ -27,6 +27,7 @@ A simple, lightweight desktop application for converting images between differen
 ### Target Formats
 - JPEG - Best for photos and web use
 - PNG - Lossless quality with transparency support
+- WebP - Modern balance of size and quality
 
 ## Installation
 

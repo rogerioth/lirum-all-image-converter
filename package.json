@@ -13,6 +13,7 @@
     "electron": "^30.0.0"
   },
   "dependencies": {
+    "exifreader": "^4.0.0",
     "libheif-js": "^1.18.2"
   }
 }

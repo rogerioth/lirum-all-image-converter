@@ -4,6 +4,9 @@ const fs = require('fs');
 
 let mainWindow;
 let logWindow = null;
+let infoWindow = null;
+
+let lastInfoPayload = null;
 
 // Store logs in main process for sharing between windows
 const MAX_LOGS = 1000;
@@ -37,6 +40,9 @@ function createWindow() {
     // Close log window if main window closes
     if (logWindow) {
       logWindow.close();
+    }
+    if (infoWindow) {
+      infoWindow.close();
     }
   });
 
@@ -100,6 +106,33 @@ function createLogWindow() {
   });
 }
 
+function createInfoWindow() {
+  if (infoWindow) {
+    infoWindow.focus();
+    return;
+  }
+
+  infoWindow = new BrowserWindow({
+    width: 920,
+    height: 640,
+    minWidth: 620,
+    minHeight: 420,
+    parent: mainWindow,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    },
+    title: 'Image Info - Lirum',
+    icon: path.join(__dirname, 'assets/icon.png')
+  });
+
+  infoWindow.loadFile('info-window.html');
+
+  infoWindow.on('closed', () => {
+    infoWindow = null;
+  });
+}
+
 // Function to add log from renderer processes
 function addLog(logEntry) {
   sharedLogs.push(logEntry);
@@ -122,6 +155,27 @@ function addLog(logEntry) {
 // IPC handler for logging from renderer
 ipcMain.on('add-log', (event, logEntry) => {
   addLog(logEntry);
+});
+
+ipcMain.on('menu-show-logs', () => {
+  createLogWindow();
+});
+
+ipcMain.on('open-info-window', () => {
+  createInfoWindow();
+});
+
+ipcMain.on('info-window-ready', () => {
+  if (infoWindow && !infoWindow.isDestroyed() && lastInfoPayload) {
+    infoWindow.webContents.send('info-window-data', lastInfoPayload);
+  }
+});
+
+ipcMain.on('info-window-data', (event, payload) => {
+  lastInfoPayload = payload;
+  if (infoWindow && !infoWindow.isDestroyed()) {
+    infoWindow.webContents.send('info-window-data', payload);
+  }
 });
 
 function createApplicationMenu() {
@@ -219,6 +273,15 @@ function createApplicationMenu() {
           accelerator: 'CmdOrCtrl+L',
           click: () => {
             createLogWindow();
+          }
+        },
+        {
+          label: 'Image Info',
+          accelerator: 'CmdOrCtrl+I',
+          click: () => {
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-open-info');
+            }
           }
         },
         { type: 'separator' },

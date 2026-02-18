@@ -1,6 +1,13 @@
 const { ipcRenderer, shell } = require('electron');
 const HeicDecoder = require('./heic-decoder');
 const logger = require('./logger');
+let ExifReader = null;
+
+try {
+  ExifReader = require('exifreader');
+} catch (err) {
+  console.warn('ExifReader not available. Metadata view will be limited.', err);
+}
 
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
@@ -8,10 +15,16 @@ const fileInput = document.getElementById('fileInput');
 const previewContainer = document.getElementById('previewContainer');
 const previewImage = document.getElementById('previewImage');
 const imageInfo = document.getElementById('imageInfo');
-const formatButtons = document.querySelectorAll('.format-btn');
+const formatCards = document.querySelectorAll('.format-card');
 const statusText = document.getElementById('statusText');
+const formatSettings = document.getElementById('formatSettings');
+const selectedFormatName = document.getElementById('selectedFormatName');
+const selectedFormatExt = document.getElementById('selectedFormatExt');
+const noSettingsNote = document.getElementById('noSettingsNote');
+const convertBtn = document.getElementById('convertBtn');
 const qualityControl = document.getElementById('qualityControl');
 const qualitySlider = document.getElementById('quality');
+const qualityLabelText = document.getElementById('qualityLabelText');
 const qualityValue = document.getElementById('qualityValue');
 const processingOverlay = document.getElementById('processingOverlay');
 
@@ -20,7 +33,9 @@ const menuBtn = document.getElementById('menuBtn');
 const menuModal = document.getElementById('menuModal');
 const closeMenu = document.getElementById('closeMenu');
 const viewLogsBtn = document.getElementById('viewLogsBtn');
+const viewInfoMenuBtn = document.getElementById('viewInfoMenuBtn');
 const aboutBtn = document.getElementById('aboutBtn');
+const viewInfoBtn = document.getElementById('viewInfoBtn');
 
 const conversionCompleteModal = document.getElementById('conversionCompleteModal');
 const closeConversionComplete = document.getElementById('closeConversionComplete');
@@ -37,11 +52,16 @@ let lastSavedFilePath = null;
 
 // State
 let currentImage = null;
+let currentFile = null;
 let currentFileName = '';
 let currentFileType = '';
 let currentCanvas = null;
 let heicDecoder = null;
 let activeModal = null;
+let currentFilePath = null;
+let currentInfoPayload = null;
+let currentInfoKey = null;
+let selectedFormat = null;
 
 // Initialize decoder (supports both HEIC and AVIF)
 async function initDecoder() {
@@ -126,14 +146,17 @@ qualitySlider.addEventListener('input', (e) => {
   qualityValue.textContent = `${e.target.value}%`;
 });
 
-// Format buttons
-formatButtons.forEach(btn => {
-  btn.addEventListener('click', () => {
-    if (!currentImage || btn.disabled) return;
-    const format = btn.dataset.format;
-    const mime = btn.dataset.mime;
-    convertImage(format, mime);
+// Format cards
+formatCards.forEach(card => {
+  card.addEventListener('click', () => {
+    if (!currentImage || card.disabled) return;
+    selectFormat(card);
   });
+});
+
+convertBtn.addEventListener('click', () => {
+  if (!currentImage || !selectedFormat) return;
+  convertImage(selectedFormat.format, selectedFormat.mime);
 });
 
 // Modal Event Listeners
@@ -144,12 +167,20 @@ viewLogsBtn.addEventListener('click', () => {
   // Request main process to open log window
   ipcRenderer.send('menu-show-logs');
 });
+viewInfoMenuBtn.addEventListener('click', () => {
+  closeActiveModal();
+  openInfoWindow();
+});
 aboutBtn.addEventListener('click', () => {
   closeActiveModal();
   openModal(aboutModal);
 });
 closeAbout.addEventListener('click', closeActiveModal);
 closeConversionComplete.addEventListener('click', closeActiveModal);
+
+if (viewInfoBtn) {
+  viewInfoBtn.addEventListener('click', openInfoWindow);
+}
 
 // Conversion complete actions
 openFolderBtn.addEventListener('click', async () => {
@@ -213,8 +244,197 @@ function showConversionComplete(filePath) {
   logger.info('Conversion complete dialog shown', { filePath });
 }
 
-async function handleFile(file) {
+function formatBytes(bytes) {
+  if (typeof bytes !== 'number' || Number.isNaN(bytes)) return 'Unknown';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  let size = bytes;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  const precision = unitIndex === 0 ? 0 : size >= 10 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatDateTime(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleString();
+}
+
+function gcd(a, b) {
+  let x = Math.abs(a);
+  let y = Math.abs(b);
+  while (y) {
+    const t = y;
+    y = x % y;
+    x = t;
+  }
+  return x || 1;
+}
+
+function formatTagValue(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (value instanceof ArrayBuffer) {
+    return `<${value.byteLength} bytes>`;
+  }
+  if (ArrayBuffer.isView(value)) {
+    return `<${value.byteLength} bytes>`;
+  }
+  if (Array.isArray(value)) {
+    return value.map(formatTagValue).join(', ');
+  }
+  try {
+    return JSON.stringify(value);
+  } catch (err) {
+    return String(value);
+  }
+}
+
+function buildTagEntry(name, tag) {
+  const section = tag.section || 'General';
+  const description = tag.description;
+  const rawValue = tag.value;
+  const value = formatTagValue(description !== undefined ? description : rawValue);
+  let raw = null;
+
+  if (description !== undefined && description !== null) {
+    const rawFormatted = formatTagValue(rawValue);
+    if (rawFormatted && rawFormatted !== value) {
+      raw = rawFormatted;
+    }
+  }
+
+  return {
+    name,
+    section,
+    value,
+    raw
+  };
+}
+
+function getInfoKey(file, filePath) {
+  const name = file?.name || '';
+  const size = file?.size || '';
+  const modified = file?.lastModified || '';
+  const pathKey = filePath || file?.path || '';
+  return `${name}|${size}|${modified}|${pathKey}`;
+}
+
+async function buildInfoPayload() {
+  if (!currentFile) return null;
+
+  const filePath = currentFilePath || currentFile.path || null;
+  const infoKey = getInfoKey(currentFile, filePath);
+  if (currentInfoPayload && currentInfoKey === infoKey) {
+    return currentInfoPayload;
+  }
+
+  const path = require('path');
+  const fs = require('fs');
+
+  let stats = null;
+  if (filePath) {
+    try {
+      stats = fs.statSync(filePath);
+    } catch (err) {
+      logger.warn('Failed to stat file for metadata', { filePath, error: err.message });
+    }
+  }
+
+  const width = currentImage?.naturalWidth || currentCanvas?.width || null;
+  const height = currentImage?.naturalHeight || currentCanvas?.height || null;
+  const ratioDivisor = width && height ? gcd(width, height) : null;
+  const ratio = ratioDivisor ? `${width / ratioDivisor}:${height / ratioDivisor}` : null;
+  const megapixels = width && height ? ((width * height) / 1000000).toFixed(2) : null;
+
+  const fileInfo = {
+    name: currentFile.name || currentFileName || 'Unknown',
+    path: filePath,
+    directory: filePath ? path.dirname(filePath) : null,
+    extension: path.extname(filePath || currentFile.name || '').toLowerCase() || null,
+    sizeBytes: currentFile.size,
+    sizeLabel: formatBytes(currentFile.size),
+    mimeType: currentFileType || currentFile.type || 'unknown',
+    lastModified: formatDateTime(currentFile.lastModified),
+    createdAt: stats ? formatDateTime(stats.birthtime) : null,
+    modifiedAt: stats ? formatDateTime(stats.mtime) : null,
+    accessedAt: stats ? formatDateTime(stats.atime) : null,
+    permissions: stats ? `0o${(stats.mode & 0o777).toString(8)}` : null
+  };
+
+  const imageInfo = {
+    width,
+    height,
+    megapixels,
+    aspectRatio: ratio
+  };
+
+  let metadata = { entries: [], total: 0 };
+  let metadataError = null;
+
+  if (!ExifReader) {
+    metadataError = 'ExifReader dependency is not installed.';
+  } else {
+    try {
+      const arrayBuffer = await currentFile.arrayBuffer();
+      const tags = ExifReader.load(arrayBuffer);
+      const entries = Object.keys(tags).map((name) => buildTagEntry(name, tags[name]));
+      metadata = { entries, total: entries.length };
+    } catch (err) {
+      metadataError = err.message || 'Failed to read metadata.';
+    }
+  }
+
+  const payload = {
+    generatedAt: new Date().toISOString(),
+    file: fileInfo,
+    image: imageInfo,
+    metadata,
+    metadataError
+  };
+
+  currentInfoPayload = payload;
+  currentInfoKey = infoKey;
+  return payload;
+}
+
+async function openInfoWindow() {
+  if (!currentFile) {
+    showStatus('No image loaded', 'error');
+    return;
+  }
+
+  ipcRenderer.send('open-info-window');
+  showStatus('Preparing image metadata...', 'info');
+
+  try {
+    const payload = await buildInfoPayload();
+    ipcRenderer.send('info-window-data', payload);
+    const statusMessage = payload?.metadataError ? 'Metadata loaded with warnings' : 'Image metadata ready';
+    showStatus(statusMessage, payload?.metadataError ? 'info' : 'success');
+  } catch (err) {
+    logger.error('Failed to build image metadata', null, err);
+    showStatus('Failed to read image metadata', 'error');
+  }
+}
+
+async function handleFile(file, filePath = null) {
   const startTime = Date.now();
+  clearFormatSelection();
+  disableInfoButton();
+  currentFile = null;
+  currentFilePath = null;
+  currentInfoPayload = null;
+  currentInfoKey = null;
   
   // Validate file exists
   if (!file) {
@@ -244,8 +464,12 @@ async function handleFile(file) {
     return;
   }
 
+  currentFile = file;
   currentFileName = file.name;
   currentFileType = file.type || (isHeic ? 'image/heic' : isAvif ? 'image/avif' : 'image/unknown');
+  currentFilePath = filePath || file.path || null;
+  currentInfoPayload = null;
+  currentInfoKey = null;
 
   showProcessing(true, 'Loading image...');
 
@@ -447,21 +671,85 @@ function showPreview(img, file, canvas = null) {
   if (canvas) {
     currentCanvas = canvas;
   }
+
+  enableInfoButton();
+}
+
+
+function selectFormat(card) {
+  formatCards.forEach(btn => {
+    btn.classList.toggle('selected', btn === card);
+  });
+
+  const format = card.dataset.format;
+  const mime = card.dataset.mime;
+  const extension = card.dataset.extension || format;
+  const qualityEnabled = card.dataset.quality === 'true';
+  const qualityLabel = card.dataset.qualityLabel || 'Quality';
+
+  selectedFormat = {
+    format,
+    mime,
+    extension,
+    quality: qualityEnabled,
+    qualityLabel
+  };
+
+  const nameEl = card.querySelector('.format-name');
+  const displayName = nameEl ? nameEl.textContent : format.toUpperCase();
+  selectedFormatName.textContent = displayName;
+  selectedFormatExt.textContent = `.${extension}`;
+
+  formatSettings.hidden = false;
+  convertBtn.disabled = false;
+  convertBtn.textContent = `Convert to ${displayName}`;
+
+  if (qualityEnabled) {
+    qualityLabelText.textContent = qualityLabel;
+    qualityControl.hidden = false;
+    noSettingsNote.hidden = true;
+  } else {
+    qualityControl.hidden = true;
+    noSettingsNote.hidden = false;
+  }
+}
+
+function clearFormatSelection() {
+  selectedFormat = null;
+  formatCards.forEach(btn => {
+    btn.classList.remove('selected');
+  });
+  formatSettings.hidden = true;
+  convertBtn.disabled = true;
+  qualityControl.hidden = true;
+  noSettingsNote.hidden = true;
 }
 
 function enableFormatButtons() {
-  formatButtons.forEach(btn => {
+  formatCards.forEach(btn => {
     btn.disabled = false;
   });
-  qualityControl.hidden = false;
 }
 
 function disableFormatButtons() {
-  formatButtons.forEach(btn => {
+  formatCards.forEach(btn => {
     btn.disabled = true;
   });
-  qualityControl.hidden = true;
+  clearFormatSelection();
 }
+
+function enableInfoButton() {
+  if (viewInfoBtn) {
+    viewInfoBtn.disabled = false;
+  }
+}
+
+function disableInfoButton() {
+  if (viewInfoBtn) {
+    viewInfoBtn.disabled = true;
+  }
+}
+
 
 function convertImage(format, mimeType) {
   if (!currentImage) {
@@ -515,9 +803,14 @@ function convertImage(format, mimeType) {
         ctx.drawImage(currentImage, 0, 0);
       }
 
-      // Get quality for JPEG
+      // Get quality for formats that support it
       let quality = undefined;
-      if (format === 'jpeg') {
+      if (selectedFormat && selectedFormat.format === format && selectedFormat.quality) {
+        quality = parseInt(qualitySlider.value) / 100;
+        if (isNaN(quality) || quality < 0 || quality > 1) {
+          quality = 0.9; // Fallback to 90%
+        }
+      } else if (format === 'jpeg') {
         quality = parseInt(qualitySlider.value) / 100;
         if (isNaN(quality) || quality < 0 || quality > 1) {
           quality = 0.9; // Fallback to 90%
@@ -638,18 +931,29 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     ipcRenderer.send('menu-open-file');
   }
+
+  // Ctrl/Cmd + I to open image info
+  if ((e.ctrlKey || e.metaKey) && e.key === 'i') {
+    e.preventDefault();
+    openInfoWindow();
+  }
 });
 
 function resetApp() {
   currentImage = null;
+  currentFile = null;
   currentFileName = '';
   currentFileType = '';
   currentCanvas = null;
+  currentFilePath = null;
+  currentInfoPayload = null;
+  currentInfoKey = null;
   previewImage.src = '';
   previewContainer.hidden = true;
   dropZone.querySelector('.drop-content').hidden = false;
   fileInput.value = '';
   disableFormatButtons();
+  disableInfoButton();
   showProcessing(false);
   showStatus('Ready');
   logger.info('App reset');
@@ -692,6 +996,11 @@ ipcRenderer.on('menu-about', () => {
   openModal(aboutModal);
 });
 
+ipcRenderer.on('menu-open-info', () => {
+  logger.info('Image info triggered from menu');
+  openInfoWindow();
+});
+
 ipcRenderer.on('menu-open-file', async () => {
   logger.info('Open file triggered from menu');
   try {
@@ -721,7 +1030,7 @@ ipcRenderer.on('menu-open-file', async () => {
       };
       
       const file = new File([buffer], fileName, { type: mimeTypes[ext] || 'image/unknown' });
-      handleFile(file);
+      handleFile(file, filePath);
     }
   } catch (err) {
     logger.error('Failed to open file from dialog', null, err);

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lirum - Image Info</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .info-window {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: var(--bg-primary);
+    }
+
+    .info-toolbar {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 18px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .info-title h1 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .info-subtitle {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+    }
+
+    .info-actions {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .info-search input {
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+      min-width: 220px;
+    }
+
+    .info-search input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .info-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: var(--bg-primary);
+    }
+
+    .info-section {
+      border: 1px solid var(--border);
+      background: var(--bg-secondary);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: var(--bg-tertiary);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-header h2 {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-secondary);
+    }
+
+    .section-count {
+      font-size: 0.75rem;
+      color: var(--text-tertiary);
+    }
+
+    .info-table {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .info-row {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .info-row:last-child {
+      border-bottom: none;
+    }
+
+    .info-label {
+      padding: 10px 14px;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--text-secondary);
+      border-right: 1px solid var(--border);
+    }
+
+    .info-value {
+      padding: 10px 14px;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+      font-size: 0.8rem;
+      color: var(--text-primary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .info-raw {
+      font-size: 0.72rem;
+      color: var(--text-tertiary);
+    }
+
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-secondary);
+      padding: 40px;
+      text-align: center;
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+
+    .status-bar {
+      padding: 8px 16px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-muted {
+      color: var(--text-tertiary);
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="info-window">
+    <div class="info-toolbar">
+      <div class="info-title">
+        <h1>Image Info</h1>
+        <div class="info-subtitle" id="infoFileName">No image loaded</div>
+      </div>
+      <div class="info-actions">
+        <div class="info-search">
+          <input type="text" id="infoSearch" placeholder="Filter metadata...">
+        </div>
+      </div>
+    </div>
+
+    <div class="info-content" id="infoContent">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        <p>No image info available. Load an image to view metadata.</p>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <span id="infoStatus">Waiting for metadata...</span>
+      <span class="status-muted" id="infoTimestamp"></span>
+    </div>
+  </div>
+
+  <script src="info-window.js"></script>
+</body>
+</html>
