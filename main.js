@@ -3,6 +3,14 @@ const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
+let logWindow = null;
+
+// Store logs in main process for sharing between windows
+const MAX_LOGS = 1000;
+let sharedLogs = [];
+
+// Store last saved file path for "show in folder" feature
+let lastSavedFilePath = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -26,11 +34,95 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // Close log window if main window closes
+    if (logWindow) {
+      logWindow.close();
+    }
   });
 
   // Create application menu
   createApplicationMenu();
 }
+
+function createLogWindow() {
+  if (logWindow) {
+    logWindow.focus();
+    return;
+  }
+
+  logWindow = new BrowserWindow({
+    width: 800,
+    height: 500,
+    minWidth: 500,
+    minHeight: 300,
+    parent: mainWindow,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false
+    },
+    title: 'Application Logs - Lirum',
+    icon: path.join(__dirname, 'assets/icon.png')
+  });
+
+  logWindow.loadFile('log-window.html');
+
+  logWindow.on('closed', () => {
+    logWindow = null;
+  });
+
+  // Handle log window IPC
+  ipcMain.on('log-window-ready', () => {
+    // Send existing logs to log window
+    if (logWindow && !logWindow.isDestroyed()) {
+      logWindow.webContents.send('log-batch', sharedLogs);
+    }
+  });
+
+  ipcMain.on('close-log-window', () => {
+    if (logWindow && !logWindow.isDestroyed()) {
+      logWindow.close();
+    }
+  });
+
+  ipcMain.on('clear-logs', () => {
+    sharedLogs = [];
+    if (logWindow && !logWindow.isDestroyed()) {
+      logWindow.webContents.send('log-cleared');
+    }
+    // Also notify main window
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('logs-cleared');
+    }
+  });
+
+  ipcMain.on('logs-exported', () => {
+    console.log('Logs exported from log window');
+  });
+}
+
+// Function to add log from renderer processes
+function addLog(logEntry) {
+  sharedLogs.push(logEntry);
+  
+  // Limit max logs
+  if (sharedLogs.length > MAX_LOGS) {
+    sharedLogs.shift();
+  }
+  
+  // Broadcast to all windows
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('log-entry', logEntry);
+  }
+  
+  if (logWindow && !logWindow.isDestroyed()) {
+    logWindow.webContents.send('log-update', logEntry);
+  }
+}
+
+// IPC handler for logging from renderer
+ipcMain.on('add-log', (event, logEntry) => {
+  addLog(logEntry);
+});
 
 function createApplicationMenu() {
   const isMac = process.platform === 'darwin';
@@ -45,7 +137,9 @@ function createApplicationMenu() {
               {
                 label: 'About ' + app.name,
                 click: () => {
-                  mainWindow.webContents.send('menu-about');
+                  if (mainWindow) {
+                    mainWindow.webContents.send('menu-about');
+                  }
                 }
               },
               { type: 'separator' },
@@ -79,7 +173,9 @@ function createApplicationMenu() {
                 label: 'Open Image...',
                 accelerator: 'Ctrl+O',
                 click: () => {
-                  mainWindow.webContents.send('menu-open-file');
+                  if (mainWindow) {
+                    mainWindow.webContents.send('menu-open-file');
+                  }
                 }
               },
               { type: 'separator' },
@@ -122,7 +218,7 @@ function createApplicationMenu() {
           label: 'Show Logs',
           accelerator: 'CmdOrCtrl+L',
           click: () => {
-            mainWindow.webContents.send('menu-show-logs');
+            createLogWindow();
           }
         },
         { type: 'separator' },
@@ -130,14 +226,18 @@ function createApplicationMenu() {
           label: 'Reload',
           accelerator: 'CmdOrCtrl+R',
           click: () => {
-            mainWindow.reload();
+            if (mainWindow) {
+              mainWindow.reload();
+            }
           }
         },
         {
           label: 'Toggle Developer Tools',
           accelerator: isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
           click: () => {
-            mainWindow.webContents.toggleDevTools();
+            if (mainWindow) {
+              mainWindow.webContents.toggleDevTools();
+            }
           }
         },
         { type: 'separator' },
@@ -178,14 +278,16 @@ function createApplicationMenu() {
           label: 'View Logs',
           accelerator: 'CmdOrCtrl+L',
           click: () => {
-            mainWindow.webContents.send('menu-show-logs');
+            createLogWindow();
           }
         },
         { type: 'separator' },
         {
           label: 'About',
           click: () => {
-            mainWindow.webContents.send('menu-about');
+            if (mainWindow) {
+              mainWindow.webContents.send('menu-about');
+            }
           }
         },
         { type: 'separator' },
@@ -341,6 +443,9 @@ ipcMain.handle('save-image', async (event, { dataUrl, defaultName }) => {
       throw new Error('Failed to verify saved file: ' + err.message);
     }
 
+    // Store the saved file path
+    lastSavedFilePath = result.filePath;
+    
     return { success: true, path: result.filePath, size: buffer.length };
 
   } catch (err) {
@@ -353,6 +458,44 @@ ipcMain.handle('save-image', async (event, { dataUrl, defaultName }) => {
   }
 });
 
+// Handle open folder request
+ipcMain.handle('open-containing-folder', async (event, filePath) => {
+  try {
+    const targetPath = filePath || lastSavedFilePath;
+    if (!targetPath) {
+      return { success: false, error: 'No file path available' };
+    }
+    
+    // shell.showItemInFolder reveals the file in the folder
+    shell.showItemInFolder(targetPath);
+    return { success: true };
+  } catch (err) {
+    console.error('Open folder error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Handle open file request
+ipcMain.handle('open-file', async (event, filePath) => {
+  try {
+    const targetPath = filePath || lastSavedFilePath;
+    if (!targetPath) {
+      return { success: false, error: 'No file path available' };
+    }
+    
+    // shell.openPath opens the file with default application
+    const result = await shell.openPath(targetPath);
+    if (result) {
+      // result is an error message if it failed
+      return { success: false, error: result };
+    }
+    return { success: true };
+  } catch (err) {
+    console.error('Open file error:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 // Handle any unhandled errors in main process
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception in main process:', err);
@@ -361,3 +504,6 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled rejection in main process:', reason);
 });
+
+// Export for use in other modules if needed
+module.exports = { addLog };

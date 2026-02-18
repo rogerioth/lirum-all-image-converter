@@ -1,4 +1,4 @@
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, shell } = require('electron');
 const HeicDecoder = require('./heic-decoder');
 const logger = require('./logger');
 
@@ -22,17 +22,18 @@ const closeMenu = document.getElementById('closeMenu');
 const viewLogsBtn = document.getElementById('viewLogsBtn');
 const aboutBtn = document.getElementById('aboutBtn');
 
-const logViewerModal = document.getElementById('logViewerModal');
-const closeLogViewer = document.getElementById('closeLogViewer');
-const logLevelFilter = document.getElementById('logLevelFilter');
-const logSearch = document.getElementById('logSearch');
-const logEntries = document.getElementById('logEntries');
-const logStats = document.getElementById('logStats');
-const exportLogsBtn = document.getElementById('exportLogsBtn');
-const clearLogsBtn = document.getElementById('clearLogsBtn');
+const conversionCompleteModal = document.getElementById('conversionCompleteModal');
+const closeConversionComplete = document.getElementById('closeConversionComplete');
+const openFolderBtn = document.getElementById('openFolderBtn');
+const openFileBtn = document.getElementById('openFileBtn');
+const convertAnotherBtn = document.getElementById('convertAnotherBtn');
+const savedFileInfo = document.getElementById('savedFileInfo');
 
 const aboutModal = document.getElementById('aboutModal');
 const closeAbout = document.getElementById('closeAbout');
+
+// Store last saved file path for conversion complete actions
+let lastSavedFilePath = null;
 
 // State
 let currentImage = null;
@@ -83,95 +84,6 @@ function toggleModal(modal) {
     openModal(modal);
   } else {
     closeActiveModal();
-  }
-}
-
-// Log Viewer Functions
-function renderLogs() {
-  const filter = {
-    level: logLevelFilter.value || null,
-    search: logSearch.value || null
-  };
-  
-  const logs = logger.getLogs(filter);
-  const stats = logger.getStats();
-  
-  // Update stats
-  logStats.textContent = `${logs.length} entries`;
-  
-  // Render entries
-  logEntries.innerHTML = logs.map(log => {
-    const levelColor = log.levelColor || '#7d8590';
-    let detailsHtml = '';
-    let stackHtml = '';
-    
-    if (log.details) {
-      detailsHtml = `
-        <div class="log-details">
-          <pre>${JSON.stringify(log.details, null, 2)}</pre>
-        </div>
-      `;
-    }
-    
-    if (log.stackTrace) {
-      stackHtml = `
-        <div class="log-stack">
-          <pre>${log.stackTrace}</pre>
-        </div>
-      `;
-    }
-    
-    return `
-      <div class="log-entry" data-id="${log.id}">
-        <div class="log-timestamp">${log.timestampLocal}</div>
-        <div class="log-content">
-          <span class="log-level" style="background: ${levelColor}20; color: ${levelColor}; border: 1px solid ${levelColor}40;">
-            ${log.level}
-          </span>
-          <span class="log-message">${escapeHtml(log.message)}</span>
-          ${detailsHtml}
-          ${stackHtml}
-        </div>
-      </div>
-    `;
-  }).join('');
-  
-  // Scroll to bottom
-  logEntries.scrollTop = logEntries.scrollHeight;
-}
-
-function escapeHtml(text) {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function openLogViewer() {
-  openModal(logViewerModal);
-  renderLogs();
-  logger.info('Log viewer opened');
-}
-
-function exportLogs() {
-  try {
-    const logsText = logger.getLogsAsText();
-    const blob = new Blob([logsText], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `lirum-logs-${new Date().toISOString().replace(/[:.]/g, '-')}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    logger.success('Logs exported');
-  } catch (err) {
-    logger.error('Failed to export logs', null, err);
-    showStatus('Failed to export logs', 'error');
   }
 }
 
@@ -229,34 +141,77 @@ menuBtn.addEventListener('click', () => openModal(menuModal));
 closeMenu.addEventListener('click', closeActiveModal);
 viewLogsBtn.addEventListener('click', () => {
   closeActiveModal();
-  openLogViewer();
+  // Request main process to open log window
+  ipcRenderer.send('menu-show-logs');
 });
 aboutBtn.addEventListener('click', () => {
   closeActiveModal();
   openModal(aboutModal);
 });
 closeAbout.addEventListener('click', closeActiveModal);
-closeLogViewer.addEventListener('click', closeActiveModal);
+closeConversionComplete.addEventListener('click', closeActiveModal);
 
-// Log viewer controls
-logLevelFilter.addEventListener('change', renderLogs);
-logSearch.addEventListener('input', renderLogs);
-exportLogsBtn.addEventListener('click', exportLogs);
-clearLogsBtn.addEventListener('click', () => {
-  if (confirm('Are you sure you want to clear all logs?')) {
-    logger.clear();
-    renderLogs();
+// Conversion complete actions
+openFolderBtn.addEventListener('click', async () => {
+  if (lastSavedFilePath) {
+    const result = await ipcRenderer.invoke('open-containing-folder', lastSavedFilePath);
+    if (!result.success) {
+      logger.error('Failed to open folder', { error: result.error });
+      showStatus('Failed to open folder', 'error');
+    }
   }
 });
 
+openFileBtn.addEventListener('click', async () => {
+  if (lastSavedFilePath) {
+    const result = await ipcRenderer.invoke('open-file', lastSavedFilePath);
+    if (!result.success) {
+      logger.error('Failed to open file', { error: result.error });
+      showStatus('Failed to open file', 'error');
+    }
+  }
+});
+
+convertAnotherBtn.addEventListener('click', () => {
+  closeActiveModal();
+  resetApp();
+});
+
 // Close modal on overlay click
-[menuModal, logViewerModal, aboutModal].forEach(modal => {
+[menuModal, aboutModal, conversionCompleteModal].forEach(modal => {
   modal.addEventListener('click', (e) => {
     if (e.target === modal) {
       closeActiveModal();
     }
   });
 });
+
+// Open external links in the system browser
+document.addEventListener('click', (e) => {
+  const link = e.target.closest('a[data-external-link]');
+  if (!link) return;
+  e.preventDefault();
+  shell.openExternal(link.href);
+});
+
+// Function to show conversion complete dialog
+function showConversionComplete(filePath) {
+  lastSavedFilePath = filePath;
+  
+  // Extract filename and directory from path
+  const path = require('path');
+  const fileName = path.basename(filePath);
+  const dirName = path.dirname(filePath);
+  
+  // Update file info display
+  savedFileInfo.innerHTML = `
+    <div class="file-name">${fileName}</div>
+    <div class="file-path">${dirName}</div>
+  `;
+  
+  openModal(conversionCompleteModal);
+  logger.info('Conversion complete dialog shown', { filePath });
+}
 
 async function handleFile(file) {
   const startTime = Date.now();
@@ -603,6 +558,8 @@ function convertImage(format, mimeType) {
               duration,
               true
             );
+            // Show conversion complete dialog
+            showConversionComplete(result.path);
           } else {
             showStatus('Save cancelled', 'info');
             logger.info('Save cancelled by user', { fileName: defaultName });
@@ -676,24 +633,10 @@ document.addEventListener('keydown', (e) => {
     }
   }
   
-  // Ctrl/Cmd + L to open logs
-  if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+  // Ctrl/Cmd + O to open file
+  if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
     e.preventDefault();
-    if (logViewerModal.hidden) {
-      openLogViewer();
-    } else {
-      closeActiveModal();
-    }
-  }
-  
-  // Ctrl/Cmd + M to open menu
-  if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
-    e.preventDefault();
-    if (menuModal.hidden) {
-      openModal(menuModal);
-    } else {
-      closeActiveModal();
-    }
+    ipcRenderer.send('menu-open-file');
   }
 });
 
@@ -720,13 +663,6 @@ document.addEventListener('DOMContentLoaded', () => {
   logger.info('Application started');
   
   initDecoder();
-  
-  // Subscribe to log updates for live viewer
-  logger.subscribe((entry) => {
-    if (activeModal === logViewerModal && !logViewerModal.hidden) {
-      renderLogs();
-    }
-  });
 });
 
 // Global error handlers
@@ -751,11 +687,6 @@ window.onunhandledrejection = (event) => {
 };
 
 // IPC handlers for native menu events
-ipcRenderer.on('menu-show-logs', () => {
-  logger.info('Show logs triggered from menu');
-  openLogViewer();
-});
-
 ipcRenderer.on('menu-about', () => {
   logger.info('About triggered from menu');
   openModal(aboutModal);

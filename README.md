@@ -10,7 +10,8 @@ A simple, lightweight desktop application for converting images between differen
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **No External Dependencies**: Uses built-in browser Canvas API and WebAssembly for image processing
 - **Privacy Focused**: All processing happens locally on your machine
-- **Detailed Logging**: Comprehensive event and error logging with export capability
+- **Detailed Logging**: Comprehensive event and error logging with separate log viewer window and export capability
+- **Post-Conversion Actions**: Show file in folder or open the converted file directly after conversion
 
 ## Supported Formats
 
@@ -75,7 +76,8 @@ npm start
 3. Choose your target format (JPEG or PNG) from the right panel
 4. Adjust JPEG quality if needed (only affects JPEG output)
 5. Select where to save the converted file
-6. Press Escape key at any time to reset and convert another image
+6. After conversion, choose to show the file in folder, open the file directly, or convert another image
+7. Press Escape key at any time to reset and convert another image
 
 ### Menu Bar
 
@@ -123,7 +125,7 @@ The application includes a comprehensive logging system that tracks:
 - Decoder initialization status
 - Errors with full stack traces
 
-Access logs via the View menu or by pressing `Ctrl/Cmd + L`. Logs can be filtered by level, searched, exported to text file, or cleared.
+Access logs via the View menu or by pressing `Ctrl/Cmd + L`. Logs open in a separate window so you can continue using the app while monitoring logs. The log window can be filtered by level, searched, exported to text file, or cleared.
 
 ## Building
 
@@ -167,7 +169,10 @@ lirum-all-image-converter/
 ├── main.js              # Electron main process
 ├── index.html           # Application UI
 ├── renderer.js          # Frontend logic and conversion
-├── heic-decoder.js      # HEIC WebAssembly decoder module
+├── heic-decoder.js      # HEIC/AVIF WebAssembly decoder module
+├── logger.js            # Logging system
+├── log-window.html      # Log viewer window UI
+├── log-window.js        # Log viewer window renderer
 ├── styles.css           # Application styles
 ├── package.json         # Dependencies and scripts
 ├── scripts/             # Platform-specific build/run scripts

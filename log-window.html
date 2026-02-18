@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lirum - Application Logs</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      height: 100vh;
+      overflow: hidden;
+    }
+    
+    .log-window-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: var(--bg-primary);
+    }
+    
+    .log-toolbar {
+      display: flex;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+      align-items: center;
+    }
+    
+    .log-filter select,
+    .log-search input {
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.85rem;
+    }
+    
+    .log-filter select {
+      min-width: 120px;
+    }
+    
+    .log-search {
+      flex: 1;
+    }
+    
+    .log-search input {
+      width: 100%;
+    }
+    
+    .log-search input::placeholder {
+      color: var(--text-tertiary);
+    }
+    
+    .log-stats {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      white-space: nowrap;
+    }
+    
+    .log-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    .toolbar-btn {
+      padding: 6px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .toolbar-btn:hover {
+      background: var(--bg-elevated);
+      border-color: var(--accent);
+    }
+    
+    .toolbar-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+    
+    .toolbar-btn.danger:hover {
+      border-color: var(--error);
+      color: var(--error);
+    }
+    
+    .log-content {
+      flex: 1;
+      overflow: hidden;
+      background: var(--bg-primary);
+    }
+    
+    .log-entries {
+      height: 100%;
+      overflow-y: auto;
+      padding: 0;
+      font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+      font-size: 0.8rem;
+    }
+    
+    .log-entry {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+      animation: fadeIn 0.2s ease;
+    }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    
+    .log-entry:hover {
+      background: var(--bg-tertiary);
+    }
+    
+    .log-entry:last-child {
+      border-bottom: none;
+    }
+    
+    .log-timestamp {
+      padding: 8px 12px;
+      color: var(--text-tertiary);
+      white-space: nowrap;
+      border-right: 1px solid var(--border);
+      min-width: 140px;
+      flex-shrink: 0;
+      font-size: 0.75rem;
+    }
+    
+    .log-entry-content {
+      padding: 8px 12px;
+      flex: 1;
+      min-width: 0;
+    }
+    
+    .log-level {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-right: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .log-message {
+      color: var(--text-primary);
+    }
+    
+    .log-details {
+      margin-top: 6px;
+      padding: 8px;
+      background: var(--bg-secondary);
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    
+    .log-details pre {
+      margin: 0;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.75rem;
+    }
+    
+    .log-stack {
+      margin-top: 6px;
+      padding: 8px;
+      background: rgba(248, 81, 73, 0.1);
+      border-left: 3px solid var(--error);
+      border-radius: 0 6px 6px 0;
+      overflow-x: auto;
+    }
+    
+    .log-stack pre {
+      margin: 0;
+      color: var(--error);
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--text-secondary);
+      padding: 40px;
+      text-align: center;
+    }
+    
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 16px;
+      opacity: 0.5;
+    }
+    
+    .status-bar {
+      padding: 8px 16px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    
+    .auto-scroll-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+    
+    .auto-scroll-toggle input {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="log-window-container">
+    <!-- Toolbar -->
+    <div class="log-toolbar">
+      <div class="log-filter">
+        <select id="logLevelFilter">
+          <option value="">All Levels</option>
+          <option value="ERROR">Error</option>
+          <option value="WARN">Warning</option>
+          <option value="INFO">Info</option>
+          <option value="SUCCESS">Success</option>
+          <option value="DEBUG">Debug</option>
+        </select>
+      </div>
+      <div class="log-search">
+        <input type="text" id="logSearch" placeholder="Search logs...">
+      </div>
+      <div class="log-stats" id="logStats">0 entries</div>
+      <div class="log-actions">
+        <button class="toolbar-btn" id="exportBtn" title="Export Logs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export
+        </button>
+        <button class="toolbar-btn danger" id="clearBtn" title="Clear Logs">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Clear
+        </button>
+      </div>
+    </div>
+    
+    <!-- Log Content -->
+    <div class="log-content">
+      <div class="log-entries" id="logEntries">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+          <p>No logs yet. Perform some actions to see logs.</p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <span id="statusText">Waiting for logs...</span>
+      <label class="auto-scroll-toggle">
+        <input type="checkbox" id="autoScroll" checked>
+        Auto-scroll
+      </label>
+    </div>
+  </div>
+  
+  <script src="log-window.js"></script>
+</body>
+</html>

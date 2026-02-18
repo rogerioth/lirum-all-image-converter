@@ -1,5 +1,7 @@
 // Logger System for Lirum All Image Converter
-// Provides structured logging with levels, timestamps, and log viewer integration
+// Provides structured logging with levels, timestamps, and sends logs to main process
+
+const { ipcRenderer } = require('electron');
 
 const LOG_LEVELS = {
   DEBUG: { value: 0, label: 'DEBUG', color: '#7d8590' },
@@ -17,7 +19,6 @@ class Logger {
     this.logLevel = LOG_LEVELS.DEBUG;
     this.listeners = [];
     this.sessionStart = new Date().toISOString();
-    this.isLogViewerOpen = false;
     
     // Add initial system info log
     this.info('Logger initialized', {
@@ -25,6 +26,31 @@ class Logger {
       platform: navigator.platform,
       language: navigator.language,
       sessionStart: this.sessionStart
+    });
+
+    // Listen for logs cleared from main process
+    ipcRenderer.on('logs-cleared', () => {
+      this.logs = [];
+      this.listeners.forEach(cb => {
+        try {
+          cb({ type: 'cleared' });
+        } catch (err) {
+          console.error('Log listener error:', err);
+        }
+      });
+    });
+
+    // Listen for log entry from main process (from other windows)
+    ipcRenderer.on('log-entry', (event, entry) => {
+      // Add to local logs if not already there
+      const exists = this.logs.some(log => log.id === entry.id);
+      if (!exists) {
+        this.logs.push(entry);
+        if (this.logs.length > MAX_LOG_ENTRIES) {
+          this.logs.shift();
+        }
+        this._notifyListeners(entry);
+      }
     });
   }
 
@@ -66,7 +92,10 @@ class Logger {
       consoleMethod(`[${entry.level}] ${message}`);
     }
 
-    // Notify listeners
+    // Send to main process for sharing with log window
+    ipcRenderer.send('add-log', entry);
+
+    // Notify local listeners
     this._notifyListeners(entry);
 
     return entry;
