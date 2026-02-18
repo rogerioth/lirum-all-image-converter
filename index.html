@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lirum All Image Converter</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <h1>Lirum All Image Converter</h1>
+      <p class="subtitle">Drag & drop your image to convert</p>
+      <div class="supported-formats">
+        <span class="format-tag">WebP</span>
+        <span class="format-tag">HEIC</span>
+        <span class="format-tag">PNG</span>
+        <span class="format-tag">JPG</span>
+        <span class="format-tag more">+ more</span>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Drop Zone -->
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-content">
+          <div class="drop-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p class="drop-text">Drag & drop your image here</p>
+          <p class="drop-subtext">Supports WebP, HEIC, PNG, JPG, and more</p>
+          <button class="browse-btn">Browse Files</button>
+          <input type="file" id="fileInput" accept="image/*,.webp,.heic,.heif" hidden>
+        </div>
+        <div class="preview-container" id="previewContainer" hidden>
+          <img id="previewImage" alt="Preview">
+          <div class="image-info" id="imageInfo"></div>
+        </div>
+        
+        <!-- Processing Overlay -->
+        <div class="processing-overlay" id="processingOverlay" hidden>
+          <div class="processing-spinner"></div>
+          <p class="processing-text" id="processingText">Processing...</p>
+        </div>
+      </div>
+
+      <!-- Format Panel -->
+      <aside class="format-panel">
+        <h2>Convert to</h2>
+        <div class="format-options">
+          <button class="format-btn" data-format="jpeg" data-mime="image/jpeg" disabled>
+            <span class="format-icon">JPG</span>
+            <span class="format-name">JPEG</span>
+            <span class="format-desc">Best for photos</span>
+          </button>
+          <button class="format-btn" data-format="png" data-mime="image/png" disabled>
+            <span class="format-icon">PNG</span>
+            <span class="format-name">PNG</span>
+            <span class="format-desc">Lossless quality</span>
+          </button>
+        </div>
+        <div class="quality-control" id="qualityControl" hidden>
+          <label for="quality">JPEG Quality: <span id="qualityValue">90%</span></label>
+          <input type="range" id="quality" min="10" max="100" value="90">
+          <div class="quality-labels">
+            <span>Smaller</span>
+            <span>Better</span>
+          </div>
+        </div>
+        
+        <div class="heic-info">
+          <p>HEIC support powered by WebAssembly</p>
+        </div>
+      </aside>
+    </div>
+
+    <!-- Status Bar -->
+    <footer class="status-bar">
+      <span id="statusText">Ready</span>
+      <span class="shortcut-hint">Press ESC to reset</span>
+    </footer>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
