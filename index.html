@@ -46,9 +46,9 @@
             </svg>
           </div>
           <p class="drop-text">Drag & drop your image here</p>
-          <p class="drop-subtext">Supports WebP, HEIC, AVIF, PNG, JPG, and more</p>
+          <p class="drop-subtext">Supports WebP, HEIC, AVIF, PNG, JPG, GIF, BMP, and more</p>
           <button class="browse-btn">Browse Files</button>
-          <input type="file" id="fileInput" accept="image/*,.webp,.heic,.heif,.avif" hidden>
+          <input type="file" id="fileInput" accept="image/*,.webp,.heic,.heif,.avif,.gif,.bmp,.tif,.tiff" hidden>
         </div>
         <div class="preview-container" id="previewContainer" hidden>
           <img id="previewImage" alt="Preview">
@@ -77,12 +77,88 @@
           <h2>Convert to</h2>
           <p class="format-panel-subtitle">Pick a target format to see options.</p>
         </div>
-        <div class="format-grid" id="formatGrid">
+                <div class="format-grid" id="formatGrid">
           <button class="format-card" data-format="jpeg" data-mime="image/jpeg" data-extension="jpg" data-quality="true" data-quality-label="JPEG Quality" disabled>
             <div class="format-card-top">
               <span class="format-pill">JPG</span>
               <span class="format-chip loss">Lossy</span>
             </div>
+            <div class="format-card-body">
+              <span class="format-name">JPEG</span>
+              <span class="format-desc">Small files, best for photos</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="png" data-mime="image/png" data-extension="png" data-quality="false" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">PNG</span>
+              <span class="format-chip lossless">Lossless</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">PNG</span>
+              <span class="format-desc">Great for graphics and transparency</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="webp" data-mime="image/webp" data-extension="webp" data-quality="true" data-quality-label="WebP Quality" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">WEBP</span>
+              <span class="format-chip modern">Modern</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">WebP</span>
+              <span class="format-desc">Balanced size and quality</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="avif" data-mime="image/avif" data-extension="avif" data-quality="true" data-quality-label="AVIF Quality" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">AVIF</span>
+              <span class="format-chip modern">Modern</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">AVIF</span>
+              <span class="format-desc">High compression, modern format</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="heic" data-mime="image/heic" data-extension="heic" data-quality="true" data-quality-label="HEIC Quality" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">HEIC</span>
+              <span class="format-chip efficient">Efficient</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">HEIC</span>
+              <span class="format-desc">Apple-friendly high efficiency</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="gif" data-mime="image/gif" data-extension="gif" data-quality="false" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">GIF</span>
+              <span class="format-chip legacy">Legacy</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">GIF</span>
+              <span class="format-desc">Limited palette, single frame</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="bmp" data-mime="image/bmp" data-extension="bmp" data-quality="false" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">BMP</span>
+              <span class="format-chip legacy">Legacy</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">BMP</span>
+              <span class="format-desc">Uncompressed bitmap format</span>
+            </div>
+          </button>
+          <button class="format-card" data-format="tiff" data-mime="image/tiff" data-extension="tiff" data-quality="false" disabled>
+            <div class="format-card-top">
+              <span class="format-pill">TIFF</span>
+              <span class="format-chip lossless">Lossless</span>
+            </div>
+            <div class="format-card-body">
+              <span class="format-name">TIFF</span>
+              <span class="format-desc">Archival-grade images</span>
+            </div>
+          </button>
+        </div>
             <div class="format-card-body">
               <span class="format-name">JPEG</span>
               <span class="format-desc">Small files, best for photos</span>
@@ -267,8 +343,8 @@
         <div class="about-grid">
           <div class="about-card">
             <h4>Supported Formats</h4>
-            <p><span class="about-label">Input:</span> WebP, HEIC, AVIF, PNG, JPG, GIF, BMP</p>
-            <p><span class="about-label">Output:</span> JPEG, PNG, WebP</p>
+            <p><span class="about-label">Input:</span> WebP, HEIC, AVIF, PNG, JPG, GIF, BMP, TIFF</p>
+            <p><span class="about-label">Output:</span> JPEG, PNG, WebP, AVIF, HEIC, GIF, BMP, TIFF</p>
           </div>
           <div class="about-card">
             <h4>Menu Shortcuts</h4>
@@ -291,10 +367,31 @@
               </li>
               <li class="oss-item">
                 <div class="oss-details">
+                  <span class="oss-name">Sharp</span>
+                  <span class="oss-license">Apache-2.0</span>
+                </div>
+                <a class="oss-link" href="https://sharp.pixelplumbing.com/" data-external-link target="_blank" rel="noreferrer">sharp.pixelplumbing.com</a>
+              </li>
+              <li class="oss-item">
+                <div class="oss-details">
                   <span class="oss-name">libheif-js</span>
                   <span class="oss-license">LGPL-3.0</span>
                 </div>
                 <a class="oss-link" href="https://github.com/catdad-experiments/libheif-js" data-external-link target="_blank" rel="noreferrer">github.com/catdad-experiments/libheif-js</a>
+              </li>
+              <li class="oss-item">
+                <div class="oss-details">
+                  <span class="oss-name">ExifReader</span>
+                  <span class="oss-license">MIT</span>
+                </div>
+                <a class="oss-link" href="https://github.com/mattiasw/ExifReader" data-external-link target="_blank" rel="noreferrer">github.com/mattiasw/ExifReader</a>
+              </li>
+              <li class="oss-item">
+                <div class="oss-details">
+                  <span class="oss-name">@electron/rebuild</span>
+                  <span class="oss-license">MIT</span>
+                </div>
+                <a class="oss-link" href="https://github.com/electron/rebuild" data-external-link target="_blank" rel="noreferrer">github.com/electron/rebuild</a>
               </li>
             </ul>
           </div>

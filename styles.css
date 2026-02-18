@@ -302,6 +302,7 @@ body {
   padding: 20px;
   display: flex;
   flex-direction: column;
+  overflow: auto;
 }
 
 .format-panel h2 {
@@ -506,6 +507,16 @@ body {
 .format-chip.modern {
   color: var(--accent);
   border-color: rgba(47, 129, 247, 0.5);
+}
+
+.format-chip.efficient {
+  color: #9ad1ff;
+  border-color: rgba(154, 209, 255, 0.5);
+}
+
+.format-chip.legacy {
+  color: var(--text-tertiary);
+  border-color: var(--border);
 }
 
 .format-card-body {

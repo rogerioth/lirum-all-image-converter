@@ -427,6 +427,13 @@ async function openInfoWindow() {
   }
 }
 
+function isTiffFile(file) {
+  if (!file || !file.name) return false;
+  const name = file.name.toLowerCase();
+  const type = (file.type || '').toLowerCase();
+  return type === 'image/tiff' || name.endsWith('.tif') || name.endsWith('.tiff');
+}
+
 async function handleFile(file, filePath = null) {
   const startTime = Date.now();
   clearFormatSelection();
@@ -452,21 +459,27 @@ async function handleFile(file, filePath = null) {
   // Check if file requires special decoder
   const isHeic = heicDecoder && heicDecoder.isHeicFile(file);
   const isAvif = heicDecoder && heicDecoder.isAvifFile(file);
+  const isTiff = isTiffFile(file);
   const isWasmDecoded = isHeic || isAvif;
-  const isStandardImage = file.type.startsWith('image/');
+  const isSharpDecoded = isTiff;
+  const standardExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tif', '.tiff'];
+  const hasStandardExtension = file.name
+    ? standardExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+    : false;
+  const isStandardImage = (file.type && file.type.startsWith('image/')) || hasStandardExtension;
   
-  if (!isStandardImage && !isWasmDecoded) {
+  if (!isStandardImage && !isWasmDecoded && !isSharpDecoded) {
     logger.error('Unsupported file type', { 
       fileName: file.name, 
       fileType: file.type 
     });
-    showStatus('Please select an image file (JPG, PNG, WebP, HEIC, AVIF)', 'error');
+    showStatus('Please select an image file (JPG, PNG, WebP, HEIC, AVIF, GIF, BMP, TIFF)', 'error');
     return;
   }
 
   currentFile = file;
   currentFileName = file.name;
-  currentFileType = file.type || (isHeic ? 'image/heic' : isAvif ? 'image/avif' : 'image/unknown');
+  currentFileType = file.type || (isHeic ? 'image/heic' : isAvif ? 'image/avif' : isTiff ? 'image/tiff' : 'image/unknown');
   currentFilePath = filePath || file.path || null;
   currentInfoPayload = null;
   currentInfoKey = null;
@@ -476,6 +489,8 @@ async function handleFile(file, filePath = null) {
   try {
     if (isWasmDecoded) {
       await handleWasmDecodedFile(file, isHeic ? 'HEIC' : 'AVIF');
+    } else if (isSharpDecoded) {
+      await handleSharpDecodedFile(file, 'TIFF');
     } else {
       await handleStandardImage(file);
     }
@@ -560,6 +575,65 @@ async function handleWasmDecodedFile(file, formatName) {
   };
   
   img.src = dataUrl;
+}
+
+async function handleSharpDecodedFile(file, formatName) {
+  const startTime = Date.now();
+  showProcessing(true, `Decoding ${formatName}...`);
+
+  let result;
+  const filePath = currentFilePath || file.path || null;
+  let arrayBuffer = null;
+
+  if (!filePath) {
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (err) {
+      throw new Error(`Failed to read ${formatName} data: ${err.message}`);
+    }
+  }
+
+  try {
+    result = await ipcRenderer.invoke('decode-image', { filePath, arrayBuffer });
+  } catch (err) {
+    const message = err?.message || String(err);
+    throw new Error(`${formatName} decode failed: ${message}`);
+  }
+
+  if (!result || !result.dataUrl) {
+    throw new Error(`${formatName} decoder returned empty result`);
+  }
+
+  const img = new Image();
+
+  return new Promise((resolve, reject) => {
+    img.onload = () => {
+      currentImage = img;
+      currentCanvas = null;
+      showPreview(img, file);
+      enableFormatButtons();
+      showStatus(`Loaded ${formatName}: ${file.name}`, 'success');
+      showProcessing(false);
+
+      const decodeDuration = Date.now() - startTime;
+      logger.logFileLoad(
+        file.name,
+        formatName.toLowerCase(),
+        file.size,
+        `${img.naturalWidth}x${img.naturalHeight}`,
+        'Sharp',
+        true
+      );
+      logger.success(`${formatName} decoded`, { duration: `${decodeDuration}ms` });
+      resolve();
+    };
+
+    img.onerror = () => {
+      reject(new Error(`Failed to load ${formatName} preview image`));
+    };
+
+    img.src = result.dataUrl;
+  });
 }
 
 async function handleStandardImage(file) {
@@ -777,7 +851,27 @@ function convertImage(format, mimeType) {
       
       // Use existing canvas if available (HEIC/AVIF), otherwise create new
       if (currentCanvas) {
-        canvas = currentCanvas;
+        if (format === 'jpeg' || format === 'bmp') {
+          canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            throw new Error('Failed to create canvas context');
+          }
+
+          canvas.width = currentCanvas.width;
+          canvas.height = currentCanvas.height;
+
+          if (canvas.width === 0 || canvas.height === 0) {
+            throw new Error('Canvas has invalid dimensions (0x0)');
+          }
+
+          ctx.fillStyle = '#FFFFFF';
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(currentCanvas, 0, 0);
+        } else {
+          canvas = currentCanvas;
+        }
       } else {
         canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -795,7 +889,7 @@ function convertImage(format, mimeType) {
         }
         
         // Fill white background for JPEG (handles transparency)
-        if (format === 'jpeg') {
+        if (format === 'jpeg' || format === 'bmp') {
           ctx.fillStyle = '#FFFFFF';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
@@ -804,23 +898,18 @@ function convertImage(format, mimeType) {
       }
 
       // Get quality for formats that support it
-      let quality = undefined;
+      let targetQuality = undefined;
       if (selectedFormat && selectedFormat.format === format && selectedFormat.quality) {
-        quality = parseInt(qualitySlider.value) / 100;
-        if (isNaN(quality) || quality < 0 || quality > 1) {
-          quality = 0.9; // Fallback to 90%
-        }
-      } else if (format === 'jpeg') {
-        quality = parseInt(qualitySlider.value) / 100;
-        if (isNaN(quality) || quality < 0 || quality > 1) {
-          quality = 0.9; // Fallback to 90%
+        targetQuality = parseInt(qualitySlider.value, 10);
+        if (Number.isNaN(targetQuality) || targetQuality < 1 || targetQuality > 100) {
+          targetQuality = 90; // Fallback to 90%
         }
       }
 
-      // Convert to target format
+      // Convert to base PNG for encoder pipeline
       let dataUrl;
       try {
-        dataUrl = canvas.toDataURL(mimeType, quality);
+        dataUrl = canvas.toDataURL('image/png');
       } catch (err) {
         throw new Error(`Canvas export failed: ${err.message}. The image may be too large.`);
       }
@@ -832,11 +921,17 @@ function convertImage(format, mimeType) {
       
       // Generate default filename
       const originalName = currentFileName.replace(/\.[^/.]+$/, '');
-      const extension = format === 'jpeg' ? 'jpg' : format;
+      const extension = selectedFormat?.extension || (format === 'jpeg' ? 'jpg' : format);
       const defaultName = `${originalName}_converted.${extension}`;
       
+
       // Save via main process
-      ipcRenderer.invoke('save-image', { dataUrl, defaultName })
+      ipcRenderer.invoke('save-image', {
+        dataUrl,
+        defaultName,
+        targetFormat: format,
+        quality: targetQuality
+      })
         .then(result => {
           const duration = Date.now() - startTime;
           
@@ -846,13 +941,11 @@ function convertImage(format, mimeType) {
               sourceFormat,
               format.toUpperCase(),
               currentFileName,
-              dataUrl.length,
+              result.size,
               `${canvas.width}x${canvas.height}`,
               duration,
               true
             );
-            // Show conversion complete dialog
-            showConversionComplete(result.path);
           } else {
             showStatus('Save cancelled', 'info');
             logger.info('Save cancelled by user', { fileName: defaultName });
@@ -1024,6 +1117,8 @@ ipcRenderer.on('menu-open-file', async () => {
         '.webp': 'image/webp',
         '.gif': 'image/gif',
         '.bmp': 'image/bmp',
+        '.tif': 'image/tiff',
+        '.tiff': 'image/tiff',
         '.heic': 'image/heic',
         '.heif': 'image/heif',
         '.avif': 'image/avif'

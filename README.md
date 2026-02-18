@@ -6,9 +6,9 @@ A simple, lightweight desktop application for converting images between differen
 
 - **Drag & Drop Interface**: Simply drop an image onto the app to begin conversion
 - **WebAssembly HEIC/AVIF Support**: Decode Apple HEIC/HEIF and AVIF images using libheif-js WebAssembly
-- **Quality Control**: Adjustable JPEG/WebP quality slider (10-100%)
+- **Quality Control**: Adjustable JPEG/WebP/AVIF/HEIC quality slider (10-100%)
 - **Cross-Platform**: Works on Windows, macOS, and Linux
-- **No External Dependencies**: Uses built-in browser Canvas API and WebAssembly for image processing
+- **Local Processing**: Uses Canvas, WebAssembly, and Sharp for broad format support (no cloud)
 - **Privacy Focused**: All processing happens locally on your machine
 - **Detailed Logging**: Comprehensive event and error logging with separate log viewer window and export capability
 - **Post-Conversion Actions**: Show file in folder or open the converted file directly after conversion
@@ -23,17 +23,23 @@ A simple, lightweight desktop application for converting images between differen
 - JPEG / JPG
 - GIF (first frame only)
 - BMP
+- TIFF (via Sharp)
 
 ### Target Formats
 - JPEG - Best for photos and web use
 - PNG - Lossless quality with transparency support
 - WebP - Modern balance of size and quality
+- AVIF - High efficiency modern format
+- HEIC - High efficiency for Apple ecosystems
+- GIF - Single-frame export
+- BMP - Uncompressed bitmap output
+- TIFF - Archival-grade output
 
 ## Installation
 
 ### Prerequisites
 
-- Node.js 18 or higher
+- Node.js 20.5 or higher
 - npm or yarn
 
 ### Setup
@@ -45,6 +51,16 @@ cd lirum-all-image-converter
 # Install dependencies
 npm install
 ```
+
+
+### Native Module Rebuild (Required for extended formats)
+
+This app uses the `sharp` library to export formats like AVIF, HEIC, TIFF, GIF, and BMP. After installing dependencies, rebuild native modules for Electron:
+
+```bash
+npm run rebuild
+```
+
 
 ## Usage
 
@@ -74,8 +90,8 @@ npm start
 
 1. Launch the application
 2. Drag and drop an image file onto the drop zone, or click "Browse Files" to select one
-3. Choose your target format (JPEG or PNG) from the right panel
-4. Adjust JPEG quality if needed (only affects JPEG output)
+3. Choose your target format from the right panel
+4. Adjust quality if the format supports it (JPEG/WebP/AVIF/HEIC)
 5. Select where to save the converted file
 6. After conversion, choose to show the file in folder, open the file directly, or convert another image
 7. Press Escape key at any time to reset and convert another image
@@ -187,10 +203,11 @@ lirum-all-image-converter/
 
 ### Image Conversion
 
-Standard image conversions use the HTML5 Canvas API:
-- Images are drawn to a canvas element
-- Canvas is exported to the target format using `canvas.toDataURL()`
-- For JPEG, a white background is applied to handle transparency
+Standard image conversions use the HTML5 Canvas API for preview:
+- Images are drawn to a canvas element in the renderer
+- The canvas is exported as PNG and passed to the main process
+- Sharp encodes the requested output format (JPEG/PNG/WebP/AVIF/HEIC/GIF/BMP/TIFF)
+- For JPEG/BMP, a white background is applied to handle transparency
 
 ### HEIC Decoding
 
@@ -230,5 +247,7 @@ MIT License
 
 - Built with Electron
 - HEIC and AVIF support via libheif-js
+- Output encoding and TIFF decoding via Sharp
+- Metadata parsing via ExifReader
 - Comprehensive logging system
 - Icons and UI inspired by modern design principles

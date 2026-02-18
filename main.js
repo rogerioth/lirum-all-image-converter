@@ -2,6 +2,174 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron')
 const path = require('path');
 const fs = require('fs');
 
+
+let sharp = null;
+try {
+  sharp = require('sharp');
+} catch (err) {
+  console.warn('Sharp is not available. Additional formats may be disabled.', err.message);
+}
+
+const OUTPUT_FORMATS = {
+  jpeg: { label: 'JPEG Image', extensions: ['jpg', 'jpeg'] },
+  png: { label: 'PNG Image', extensions: ['png'] },
+  webp: { label: 'WebP Image', extensions: ['webp'] },
+  avif: { label: 'AVIF Image', extensions: ['avif'] },
+  heic: { label: 'HEIC Image', extensions: ['heic', 'heif'] },
+  gif: { label: 'GIF Image', extensions: ['gif'] },
+  bmp: { label: 'BMP Image', extensions: ['bmp'] },
+  tiff: { label: 'TIFF Image', extensions: ['tif', 'tiff'] }
+};
+
+function normalizeFormat(format) {
+  if (!format) return null;
+  const value = String(format).toLowerCase();
+  if (value === 'jpg') return 'jpeg';
+  if (value === 'heif') return 'heic';
+  if (value === 'tif') return 'tiff';
+  return value;
+}
+
+function normalizeQuality(value) {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed)) return null;
+  return Math.min(100, Math.max(1, parsed));
+}
+
+function parseDataUrl(dataUrl) {
+  const matches = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!matches || matches.length !== 3) {
+    throw new Error('Invalid data URL format');
+  }
+  const base64Data = matches[2];
+  if (!base64Data || base64Data.length === 0) {
+    throw new Error('Empty image data');
+  }
+  return Buffer.from(base64Data, 'base64');
+}
+
+function ensureExtension(filePath, extension) {
+  const ext = path.extname(filePath);
+  if (!ext) return `${filePath}.${extension}`;
+  return filePath;
+}
+
+function buildSaveFilters(targetFormat) {
+  const ordered = ['jpeg', 'png', 'webp', 'avif', 'heic', 'gif', 'bmp', 'tiff'];
+  const filters = [];
+  const formatKey = normalizeFormat(targetFormat);
+
+  if (formatKey && OUTPUT_FORMATS[formatKey]) {
+    filters.push({
+      name: OUTPUT_FORMATS[formatKey].label,
+      extensions: OUTPUT_FORMATS[formatKey].extensions
+    });
+  }
+
+  ordered.forEach(key => {
+    if (!OUTPUT_FORMATS[key]) return;
+    if (formatKey === key) return;
+    filters.push({
+      name: OUTPUT_FORMATS[key].label,
+      extensions: OUTPUT_FORMATS[key].extensions
+    });
+  });
+
+  filters.push({
+    name: 'All Images',
+    extensions: ordered.flatMap(key => OUTPUT_FORMATS[key].extensions)
+  });
+
+  return filters;
+}
+
+function encodeBmp(pixelData, width, height) {
+  const bytesPerPixel = 3;
+  const rowStride = Math.floor((width * bytesPerPixel + 3) / 4) * 4;
+  const imageSize = rowStride * height;
+  const fileHeaderSize = 14;
+  const infoHeaderSize = 40;
+  const fileSize = fileHeaderSize + infoHeaderSize + imageSize;
+
+  const buffer = Buffer.alloc(fileSize);
+
+  buffer.write('BM', 0, 2, 'ascii');
+  buffer.writeUInt32LE(fileSize, 2);
+  buffer.writeUInt32LE(0, 6);
+  buffer.writeUInt32LE(fileHeaderSize + infoHeaderSize, 10);
+
+  buffer.writeUInt32LE(infoHeaderSize, 14);
+  buffer.writeInt32LE(width, 18);
+  buffer.writeInt32LE(height, 22);
+  buffer.writeUInt16LE(1, 26);
+  buffer.writeUInt16LE(bytesPerPixel * 8, 28);
+  buffer.writeUInt32LE(0, 30);
+  buffer.writeUInt32LE(imageSize, 34);
+  buffer.writeInt32LE(2835, 38);
+  buffer.writeInt32LE(2835, 42);
+  buffer.writeUInt32LE(0, 46);
+  buffer.writeUInt32LE(0, 50);
+
+  let offset = fileHeaderSize + infoHeaderSize;
+  for (let y = 0; y < height; y++) {
+    const sourceRow = height - 1 - y;
+    let rowOffset = offset + y * rowStride;
+    for (let x = 0; x < width; x++) {
+      const srcIndex = (sourceRow * width + x) * 4;
+      buffer[rowOffset++] = pixelData[srcIndex + 2];
+      buffer[rowOffset++] = pixelData[srcIndex + 1];
+      buffer[rowOffset++] = pixelData[srcIndex];
+    }
+  }
+
+  return buffer;
+}
+
+async function encodeOutputBuffer(inputBuffer, targetFormat, qualityValue) {
+  const format = normalizeFormat(targetFormat);
+  if (!format) {
+    throw new Error('Missing output format');
+  }
+
+  const quality = normalizeQuality(qualityValue);
+
+  if (format === 'bmp') {
+    if (!sharp) {
+      throw new Error('BMP output requires sharp. Please install dependencies and rebuild native modules.');
+    }
+    const raw = await sharp(inputBuffer, { failOnError: false })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    return encodeBmp(raw.data, raw.info.width, raw.info.height);
+  }
+
+  if (!sharp) {
+    throw new Error('Additional formats require sharp. Please install dependencies and rebuild native modules.');
+  }
+
+  let pipeline = sharp(inputBuffer, { failOnError: false });
+
+  if (format === 'jpeg') {
+    pipeline = pipeline.flatten({ background: '#ffffff' }).jpeg({ quality: quality || 90 });
+  } else if (format === 'png') {
+    pipeline = pipeline.png();
+  } else if (format === 'webp') {
+    pipeline = pipeline.webp({ quality: quality || 90 });
+  } else if (format === 'avif') {
+    pipeline = pipeline.avif({ quality: quality || 90 });
+  } else if (format === 'heic') {
+    pipeline = pipeline.heif({ quality: quality || 90, compression: 'hevc' });
+  } else if (format === 'gif') {
+    pipeline = pipeline.gif();
+  } else if (format === 'tiff') {
+    pipeline = pipeline.tiff();
+  } else {
+    throw new Error(`Unsupported output format: ${format}`);
+  }
+
+  return pipeline.toBuffer();
+}
+
 let mainWindow;
 let logWindow = null;
 let infoWindow = null;
@@ -404,7 +572,7 @@ ipcMain.handle('show-open-dialog', async () => {
     filters: [
       {
         name: 'Images',
-        extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic', 'heif', 'avif']
+        extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif']
       },
       { name: 'All Files', extensions: ['*'] }
     ]
@@ -412,33 +580,72 @@ ipcMain.handle('show-open-dialog', async () => {
   return result;
 });
 
+ipcMain.handle('decode-image', async (event, { filePath, arrayBuffer, dataUrl }) => {
+  if (!sharp) {
+    throw new Error('Decoder requires sharp. Please install dependencies and rebuild native modules.');
+  }
+
+  let inputBuffer;
+  if (filePath) {
+    try {
+      inputBuffer = fs.readFileSync(filePath);
+    } catch (err) {
+      throw new Error(`Failed to read file: ${err.message}`);
+    }
+  } else if (arrayBuffer) {
+    inputBuffer = Buffer.from(arrayBuffer);
+  } else if (dataUrl) {
+    inputBuffer = parseDataUrl(dataUrl);
+  } else {
+    throw new Error('No image data provided for decoding');
+  }
+
+  const decoded = await sharp(inputBuffer, { failOnError: false })
+    .png()
+    .toBuffer({ resolveWithObject: true });
+
+  if (!decoded?.info?.width || !decoded?.info?.height) {
+    throw new Error('Decoded image has invalid dimensions');
+  }
+
+  const base64 = decoded.data.toString('base64');
+  return {
+    success: true,
+    dataUrl: `data:image/png;base64,${base64}`,
+    width: decoded.info.width,
+    height: decoded.info.height
+  };
+});
+
 // Handle save dialog
-ipcMain.handle('save-image', async (event, { dataUrl, defaultName }) => {
+ipcMain.handle('save-image', async (event, { dataUrl, defaultName, targetFormat, quality }) => {
   try {
-    // Validate inputs
     if (!dataUrl || typeof dataUrl !== 'string') {
       throw new Error('Invalid image data provided');
     }
-    
-    if (!defaultName || typeof defaultName !== 'string') {
-      defaultName = 'converted_image.jpg';
+
+    let format = normalizeFormat(targetFormat);
+    if (!format && defaultName) {
+      const extFromName = path.extname(defaultName).toLowerCase().replace('.', '');
+      format = normalizeFormat(extFromName);
     }
 
-    // Ensure default name has proper extension
-    const extension = path.extname(defaultName).toLowerCase();
-    const validExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp'];
-    if (!validExtensions.includes(extension)) {
-      defaultName += '.jpg';
+    const formatInfo = format ? OUTPUT_FORMATS[format] : null;
+
+    if (!defaultName || typeof defaultName !== 'string') {
+      defaultName = formatInfo ? `converted_image.${formatInfo.extensions[0]}` : 'converted_image.jpg';
+    }
+
+    if (formatInfo) {
+      const currentExt = path.extname(defaultName).toLowerCase().replace('.', '');
+      if (!formatInfo.extensions.includes(currentExt)) {
+        defaultName = defaultName.replace(/\.[^/.]+$/, '') + `.${formatInfo.extensions[0]}`;
+      }
     }
 
     const result = await dialog.showSaveDialog(mainWindow, {
       defaultPath: defaultName,
-      filters: [
-        { name: 'JPEG Image', extensions: ['jpg', 'jpeg'] },
-        { name: 'PNG Image', extensions: ['png'] },
-        { name: 'WebP Image', extensions: ['webp'] },
-        { name: 'All Images', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'] }
-      ],
+      filters: buildSaveFilters(format),
       title: 'Save Converted Image'
     });
 
@@ -446,41 +653,25 @@ ipcMain.handle('save-image', async (event, { dataUrl, defaultName }) => {
       return { success: false, cancelled: true };
     }
 
-    // Parse data URL
-    const matches = dataUrl.match(/^data:image\/(\w+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      throw new Error('Invalid data URL format');
+    let outputPath = result.filePath;
+    if (formatInfo) {
+      outputPath = ensureExtension(outputPath, formatInfo.extensions[0]);
     }
 
-    const base64Data = matches[2];
-    
-    // Validate base64 data
-    if (!base64Data || base64Data.length === 0) {
-      throw new Error('Empty image data');
-    }
-
-    // Convert to buffer
-    let buffer;
-    try {
-      buffer = Buffer.from(base64Data, 'base64');
-    } catch (err) {
-      throw new Error('Failed to decode image data: ' + err.message);
-    }
-
-    // Validate buffer size
-    if (buffer.length === 0) {
-      throw new Error('Decoded image is empty');
-    }
+    const inputBuffer = parseDataUrl(dataUrl);
 
     // Check for reasonable image size (max 100MB)
     const MAX_SIZE = 100 * 1024 * 1024;
-    if (buffer.length > MAX_SIZE) {
-      throw new Error(`Image too large (${(buffer.length / 1024 / 1024).toFixed(1)}MB). Max: 100MB`);
+    if (inputBuffer.length > MAX_SIZE) {
+      throw new Error(`Image too large (${(inputBuffer.length / 1024 / 1024).toFixed(1)}MB). Max: 100MB`);
     }
 
-    // Write file
+    const outputBuffer = format
+      ? await encodeOutputBuffer(inputBuffer, format, quality)
+      : inputBuffer;
+
     try {
-      fs.writeFileSync(result.filePath, buffer);
+      fs.writeFileSync(outputPath, outputBuffer);
     } catch (err) {
       if (err.code === 'EACCES') {
         throw new Error('Permission denied. Cannot write to selected location.');
@@ -488,33 +679,26 @@ ipcMain.handle('save-image', async (event, { dataUrl, defaultName }) => {
         throw new Error('Not enough disk space to save file.');
       } else if (err.code === 'EBUSY') {
         throw new Error('File is locked by another program.');
-      } else {
-        throw new Error(`Failed to write file: ${err.message}`);
       }
+      throw new Error(`Failed to write file: ${err.message}`);
     }
 
-    // Verify file was written
     try {
-      const stats = fs.statSync(result.filePath);
+      const stats = fs.statSync(outputPath);
       if (stats.size === 0) {
         throw new Error('File was created but is empty');
-      }
-      if (stats.size !== buffer.length) {
-        console.warn(`File size mismatch: expected ${buffer.length}, got ${stats.size}`);
       }
     } catch (err) {
       throw new Error('Failed to verify saved file: ' + err.message);
     }
 
-    // Store the saved file path
-    lastSavedFilePath = result.filePath;
-    
-    return { success: true, path: result.filePath, size: buffer.length };
+    lastSavedFilePath = outputPath;
 
+    return { success: true, path: outputPath, size: outputBuffer.length, format };
   } catch (err) {
     console.error('Save image error:', err);
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: err.message || 'Unknown error during save',
       code: err.code
     };
