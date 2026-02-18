@@ -1,7 +1,7 @@
 {
   "name": "lirum-all-image-converter",
   "version": "1.0.0",
-  "description": "Simple drag-and-drop image converter supporting WebP, HEIC, JPG, PNG",
+  "description": "Simple drag-and-drop image converter supporting WebP, HEIC, AVIF, JPG, PNG",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

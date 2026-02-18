@@ -1,21 +1,23 @@
 # Lirum All Image Converter
 
-A simple, lightweight desktop application for converting images between different formats. Built with Electron and featuring a clean, intuitive drag-and-drop interface.
+A simple, lightweight desktop application for converting images between different formats. Built with Electron and featuring a clean, intuitive drag-and-drop interface. Supports modern formats like HEIC and AVIF through WebAssembly decoders.
 
 ## Features
 
 - **Drag & Drop Interface**: Simply drop an image onto the app to begin conversion
-- **WebAssembly HEIC Support**: Decode Apple HEIC/HEIF images without native OS dependencies
+- **WebAssembly HEIC/AVIF Support**: Decode Apple HEIC/HEIF and AVIF images using libheif-js WebAssembly
 - **Quality Control**: Adjustable JPEG quality slider (10-100%)
 - **Cross-Platform**: Works on Windows, macOS, and Linux
 - **No External Dependencies**: Uses built-in browser Canvas API and WebAssembly for image processing
 - **Privacy Focused**: All processing happens locally on your machine
+- **Detailed Logging**: Comprehensive event and error logging with export capability
 
 ## Supported Formats
 
 ### Source Formats
 - WebP
 - HEIC / HEIF (via WebAssembly decoder)
+- AVIF (via WebAssembly decoder - same as HEIC)
 - PNG
 - JPEG / JPG
 - GIF (first frame only)
@@ -75,9 +77,53 @@ npm start
 5. Select where to save the converted file
 6. Press Escape key at any time to reset and convert another image
 
-### HEIC Support
+### Menu Bar
 
-HEIC images (common on Apple devices) are decoded using libheif-js WebAssembly. The first time you load a HEIC file, it may take a moment to initialize the decoder. Subsequent conversions will be faster.
+The application includes a native menu bar with the following options:
+
+**File** (Windows/Linux) / **App** (macOS)
+- Open Image (Ctrl/Cmd+O) - Browse for an image file
+- Exit/Quit
+
+**Edit**
+- Standard editing commands (Undo, Redo, Cut, Copy, Paste, Select All)
+
+**View**
+- Show Logs (Ctrl/Cmd+L) - Open the log viewer
+- Reload (Ctrl/Cmd+R) - Reload the application
+- Toggle Developer Tools - Open Chrome DevTools
+- Zoom controls and fullscreen toggle
+
+**Window**
+- Minimize, Close window controls
+
+**Help**
+- View Logs (Ctrl/Cmd+L)
+- About - Show application information
+- Documentation - Open README.md
+
+### Keyboard Shortcuts
+
+| Key | Action |
+|-----|--------|
+| `Escape` | Reset app / Close modal |
+| `Ctrl/Cmd + O` | Open image file |
+| `Ctrl/Cmd + L` | Open log viewer |
+| `Ctrl/Cmd + Shift + I` | Toggle Developer Tools |
+
+### HEIC and AVIF Support
+
+HEIC (common on Apple devices) and AVIF (next-gen format with superior compression) are both decoded using libheif-js WebAssembly. The first time you load one of these files, it may take a moment to initialize the decoder. Subsequent conversions will be faster.
+
+### Logging System
+
+The application includes a comprehensive logging system that tracks:
+- File load events (format, size, dimensions, decoder used)
+- Conversion events (source/target formats, duration, success/failure)
+- Decoder initialization status
+- Errors with full stack traces
+
+Access logs via the View menu or by pressing `Ctrl/Cmd + L`. Logs can be filtered by level, searched, exported to text file, or cleared.
 
 ## Building
 
@@ -177,5 +223,6 @@ MIT License
 ## Credits
 
 - Built with Electron
-- HEIC support via libheif-js
+- HEIC and AVIF support via libheif-js
+- Comprehensive logging system
 - Icons and UI inspired by modern design principles

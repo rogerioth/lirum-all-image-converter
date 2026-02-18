@@ -10,11 +10,23 @@
   <div class="app-container">
     <!-- Header -->
     <header class="app-header">
-      <h1>Lirum All Image Converter</h1>
-      <p class="subtitle">Drag & drop your image to convert</p>
+      <div class="header-content">
+        <div class="header-title">
+          <h1>Lirum All Image Converter</h1>
+          <p class="subtitle">Drag & drop your image to convert</p>
+        </div>
+        <button class="menu-btn" id="menuBtn" title="Open Menu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      </div>
       <div class="supported-formats">
         <span class="format-tag">WebP</span>
         <span class="format-tag">HEIC</span>
+        <span class="format-tag">AVIF</span>
         <span class="format-tag">PNG</span>
         <span class="format-tag">JPG</span>
         <span class="format-tag more">+ more</span>
@@ -34,9 +46,9 @@
             </svg>
           </div>
           <p class="drop-text">Drag & drop your image here</p>
-          <p class="drop-subtext">Supports WebP, HEIC, PNG, JPG, and more</p>
+          <p class="drop-subtext">Supports WebP, HEIC, AVIF, PNG, JPG, and more</p>
           <button class="browse-btn">Browse Files</button>
-          <input type="file" id="fileInput" accept="image/*,.webp,.heic,.heif" hidden>
+          <input type="file" id="fileInput" accept="image/*,.webp,.heic,.heif,.avif" hidden>
         </div>
         <div class="preview-container" id="previewContainer" hidden>
           <img id="previewImage" alt="Preview">
@@ -74,8 +86,8 @@
           </div>
         </div>
         
-        <div class="heic-info">
-          <p>HEIC support powered by WebAssembly</p>
+        <div class="decoder-info">
+          <p>HEIC & AVIF support powered by WebAssembly</p>
         </div>
       </aside>
     </div>
@@ -83,8 +95,128 @@
     <!-- Status Bar -->
     <footer class="status-bar">
       <span id="statusText">Ready</span>
-      <span class="shortcut-hint">Press ESC to reset</span>
+      <span class="shortcut-hint">ESC: Reset | Ctrl/Cmd+L: Logs | Ctrl/Cmd+O: Open</span>
     </footer>
+  </div>
+
+  <!-- Menu Modal -->
+  <div class="modal-overlay" id="menuModal" hidden>
+    <div class="modal menu-modal">
+      <div class="modal-header">
+        <h3>Menu</h3>
+        <button class="modal-close" id="closeMenu">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="menu-items">
+          <button class="menu-item" id="viewLogsBtn">
+            <span class="menu-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+            </span>
+            <span class="menu-text">
+              <span class="menu-label">View Logs</span>
+              <span class="menu-shortcut">Ctrl/Cmd + L</span>
+            </span>
+          </button>
+          <button class="menu-item" id="aboutBtn">
+            <span class="menu-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+              </svg>
+            </span>
+            <span class="menu-text">
+              <span class="menu-label">About</span>
+            </span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log Viewer Modal -->
+  <div class="modal-overlay" id="logViewerModal" hidden>
+    <div class="modal log-viewer-modal">
+      <div class="modal-header">
+        <h3>Application Logs</h3>
+        <div class="modal-actions">
+          <button class="modal-btn" id="exportLogsBtn" title="Export Logs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </button>
+          <button class="modal-btn" id="clearLogsBtn" title="Clear Logs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+          <button class="modal-close" id="closeLogViewer">&times;</button>
+        </div>
+      </div>
+      <div class="modal-toolbar">
+        <div class="log-filter">
+          <select id="logLevelFilter">
+            <option value="">All Levels</option>
+            <option value="ERROR">Error</option>
+            <option value="WARN">Warning</option>
+            <option value="INFO">Info</option>
+            <option value="SUCCESS">Success</option>
+            <option value="DEBUG">Debug</option>
+          </select>
+        </div>
+        <div class="log-search">
+          <input type="text" id="logSearch" placeholder="Search logs...">
+        </div>
+        <div class="log-stats" id="logStats"></div>
+      </div>
+      <div class="modal-body log-body">
+        <div class="log-entries" id="logEntries"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Modal -->
+  <div class="modal-overlay" id="aboutModal" hidden>
+    <div class="modal about-modal">
+      <div class="modal-header">
+        <h3>About</h3>
+        <button class="modal-close" id="closeAbout">&times;</button>
+      </div>
+      <div class="modal-body about-body">
+        <h2>Lirum All Image Converter</h2>
+        <p class="version">Version 1.0.0</p>
+        <p class="description">
+          A simple, lightweight desktop application for converting images between different formats.
+          Supports modern formats like HEIC and AVIF through WebAssembly decoders.
+        </p>
+        <div class="about-section">
+          <h4>Supported Formats</h4>
+          <p>Input: WebP, HEIC, AVIF, PNG, JPG, GIF, BMP</p>
+          <p>Output: JPEG, PNG</p>
+        </div>
+        <div class="about-section">
+          <h4>Menu Shortcuts</h4>
+          <ul>
+            <li><kbd>Ctrl/Cmd + O</kbd> - Open image file</li>
+            <li><kbd>Ctrl/Cmd + L</kbd> - View logs</li>
+            <li><kbd>Esc</kbd> - Reset / Close modal</li>
+          </ul>
+          <p style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 8px;">
+            Use the menu bar for more options: File, Edit, View, Window, Help
+          </p>
+        </div>
+        <p class="license">MIT License</p>
+      </div>
+    </div>
   </div>
 
   <script src="renderer.js"></script>

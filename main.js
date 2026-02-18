@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -27,6 +27,191 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Create application menu
+  createApplicationMenu();
+}
+
+function createApplicationMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // App / File Menu
+    ...(isMac
+      ? [
+          {
+            label: app.name,
+            submenu: [
+              {
+                label: 'About ' + app.name,
+                click: () => {
+                  mainWindow.webContents.send('menu-about');
+                }
+              },
+              { type: 'separator' },
+              {
+                label: 'Hide ' + app.name,
+                accelerator: 'Command+H',
+                role: 'hide'
+              },
+              {
+                label: 'Hide Others',
+                accelerator: 'Command+Shift+H',
+                role: 'hideOthers'
+              },
+              { label: 'Show All', role: 'unhide' },
+              { type: 'separator' },
+              {
+                label: 'Quit',
+                accelerator: 'Command+Q',
+                click: () => {
+                  app.quit();
+                }
+              }
+            ]
+          }
+        ]
+      : [
+          {
+            label: 'File',
+            submenu: [
+              {
+                label: 'Open Image...',
+                accelerator: 'Ctrl+O',
+                click: () => {
+                  mainWindow.webContents.send('menu-open-file');
+                }
+              },
+              { type: 'separator' },
+              {
+                label: 'Exit',
+                accelerator: 'Ctrl+Q',
+                click: () => {
+                  app.quit();
+                }
+              }
+            ]
+          }
+        ]),
+
+    // Edit Menu
+    {
+      label: 'Edit',
+      submenu: [
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', role: 'undo' },
+        { label: 'Redo', accelerator: 'Shift+CmdOrCtrl+Z', role: 'redo' },
+        { type: 'separator' },
+        { label: 'Cut', accelerator: 'CmdOrCtrl+X', role: 'cut' },
+        { label: 'Copy', accelerator: 'CmdOrCtrl+C', role: 'copy' },
+        { label: 'Paste', accelerator: 'CmdOrCtrl+V', role: 'paste' },
+        ...(isMac
+          ? [
+              { label: 'Paste and Match Style', role: 'pasteAndMatchStyle' },
+              { label: 'Delete', role: 'delete' },
+              { label: 'Select All', accelerator: 'Cmd+A', role: 'selectAll' }
+            ]
+          : [{ label: 'Select All', accelerator: 'Ctrl+A', role: 'selectAll' }])
+      ]
+    },
+
+    // View Menu
+    {
+      label: 'View',
+      submenu: [
+        {
+          label: 'Show Logs',
+          accelerator: 'CmdOrCtrl+L',
+          click: () => {
+            mainWindow.webContents.send('menu-show-logs');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Reload',
+          accelerator: 'CmdOrCtrl+R',
+          click: () => {
+            mainWindow.reload();
+          }
+        },
+        {
+          label: 'Toggle Developer Tools',
+          accelerator: isMac ? 'Alt+Command+I' : 'Ctrl+Shift+I',
+          click: () => {
+            mainWindow.webContents.toggleDevTools();
+          }
+        },
+        { type: 'separator' },
+        { label: 'Actual Size', role: 'resetZoom' },
+        { label: 'Zoom In', role: 'zoomIn' },
+        { label: 'Zoom Out', role: 'zoomOut' },
+        { type: 'separator' },
+        { label: 'Toggle Fullscreen', role: 'togglefullscreen' }
+      ]
+    },
+
+    // Window Menu
+    {
+      label: 'Window',
+      submenu: [
+        { label: 'Minimize', accelerator: 'CmdOrCtrl+M', role: 'minimize' },
+        { label: 'Close', accelerator: 'CmdOrCtrl+W', role: 'close' },
+        ...(isMac
+          ? [
+              { type: 'separator' },
+              { label: 'Bring All to Front', role: 'front' },
+              { type: 'separator' },
+              {
+                label: 'Window',
+                role: 'window',
+                submenu: [{ label: 'Minimize', role: 'minimize' }]
+              }
+            ]
+          : [])
+      ]
+    },
+
+    // Help Menu
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'View Logs',
+          accelerator: 'CmdOrCtrl+L',
+          click: () => {
+            mainWindow.webContents.send('menu-show-logs');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'About',
+          click: () => {
+            mainWindow.webContents.send('menu-about');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Documentation',
+          click: async () => {
+            const readmePath = path.join(__dirname, 'README.md');
+            if (fs.existsSync(readmePath)) {
+              await shell.openPath(readmePath);
+            } else {
+              dialog.showErrorBox('Documentation Not Found', 'README.md not found.');
+            }
+          }
+        },
+        {
+          label: 'GitHub Repository',
+          click: async () => {
+            await shell.openExternal('https://github.com');
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 app.whenReady().then(createWindow);
@@ -41,6 +226,25 @@ app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow();
   }
+});
+
+// IPC handlers for menu actions
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
+ipcMain.handle('show-open-dialog', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'Images',
+        extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'heic', 'heif', 'avif']
+      },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  return result;
 });
 
 // Handle save dialog

@@ -1,5 +1,13 @@
-// HEIC Decoder using libheif-js WebAssembly
-const libheif = require('libheif-js');
+// HEIC/AVIF Decoder using libheif-js WebAssembly
+// Note: libheif-js supports both HEIC and AVIF formats
+// Prefer wasm bundle for better AVIF support, fall back to JS build if needed.
+const libheif = (() => {
+  try {
+    return require('libheif-js/wasm-bundle');
+  } catch (err) {
+    return require('libheif-js');
+  }
+})();
 
 class HeicDecoder {
   constructor() {
@@ -15,14 +23,14 @@ class HeicDecoder {
       this.decoder = libheif;
       this.isReady = true;
     } catch (err) {
-      console.error('Failed to initialize HEIC decoder:', err);
-      throw new Error('HEIC decoder initialization failed: ' + err.message);
+      console.error('Failed to initialize HEIC/AVIF decoder:', err);
+      throw new Error('Decoder initialization failed: ' + err.message);
     }
   }
 
   /**
-   * Decode HEIC file to a canvas element
-   * @param {File|Buffer|ArrayBuffer} file - The HEIC file
+   * Decode HEIC/AVIF file to a canvas element
+   * @param {File|Buffer|ArrayBuffer} file - The HEIC/AVIF file
    * @param {Function} onError - Optional error callback
    * @returns {Promise<HTMLCanvasElement>}
    */
@@ -31,101 +39,135 @@ class HeicDecoder {
       await this.init();
     }
 
-    let arrayBuffer;
-    try {
-      // Convert file to ArrayBuffer
-      arrayBuffer = await this._fileToArrayBuffer(file);
-    } catch (err) {
-      const error = new Error('Failed to read HEIC file: ' + err.message);
-      if (onError) onError(error);
-      throw error;
-    }
-
+    // Convert file to ArrayBuffer
+    const arrayBuffer = await this._fileToArrayBuffer(file);
     const uint8Array = new Uint8Array(arrayBuffer);
 
-    // Use libheif-js to decode
-    let heif;
     try {
-      heif = await this.decoder;
+      return await this._decodeWithLibheif(uint8Array);
     } catch (err) {
-      const error = new Error('HEIC decoder not available: ' + err.message);
-      if (onError) onError(error);
-      throw error;
+      if (this.isAvifFile(file)) {
+        try {
+          return await this._decodeAvifNatively(file);
+        } catch (nativeErr) {
+          if (onError) onError(nativeErr);
+          throw nativeErr;
+        }
+      }
+      if (onError) onError(err);
+      throw err;
     }
-    
+  }
+
+  async _decodeWithLibheif(uint8Array) {
+    const heif = await this.decoder;
+
     return new Promise((resolve, reject) => {
       try {
-        // libheif-js API
         const decoder = new heif.HeifDecoder();
         const data = decoder.decode(uint8Array);
-        
+
         if (!data || data.length === 0) {
-          const error = new Error('Failed to decode HEIC image: no images found in file');
-          if (onError) onError(error);
-          reject(error);
+          reject(new Error('Failed to decode image: no images found in file'));
           return;
         }
 
         const image = data[0];
-        
-        // Validate image dimensions
         const width = image.get_width();
         const height = image.get_height();
-        
+
         if (!width || !height || width <= 0 || height <= 0) {
-          const error = new Error(`Invalid HEIC image dimensions: ${width}x${height}`);
-          if (onError) onError(error);
-          reject(error);
+          reject(new Error(`Invalid image dimensions: ${width}x${height}`));
           return;
         }
 
-        // Create canvas and draw the image
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
 
         if (!ctx) {
-          const error = new Error('Failed to get 2D context for canvas');
-          if (onError) onError(error);
-          reject(error);
+          reject(new Error('Failed to get 2D context for canvas'));
           return;
         }
 
-        // Get image data
-        const imageDataBuffer = new Uint8ClampedArray(width * height * 4);
-        
-        image.display({
-          data: imageDataBuffer,
-          width: width,
-          height: height
-        }, (decodedData) => {
-          if (!decodedData || !decodedData.data) {
-            const error = new Error('HEIC display callback returned invalid data');
-            if (onError) onError(error);
-            reject(error);
+        const imageData = ctx.createImageData(width, height);
+
+        image.display(imageData, (displayData) => {
+          if (!displayData) {
+            reject(new Error('Display callback returned invalid data'));
             return;
           }
-          
+
           try {
-            const imageData = new ImageData(
-              decodedData.data,
-              decodedData.width,
-              decodedData.height
-            );
             ctx.putImageData(imageData, 0, 0);
             resolve(canvas);
           } catch (err) {
-            const error = new Error('Failed to draw HEIC to canvas: ' + err.message);
-            if (onError) onError(error);
-            reject(error);
+            reject(new Error('Failed to draw to canvas: ' + err.message));
           }
         });
       } catch (err) {
-        const error = new Error('HEIC decode error: ' + err.message);
-        if (onError) onError(error);
-        reject(error);
+        reject(new Error('Decode error: ' + err.message));
       }
+    });
+  }
+
+  async _decodeAvifNatively(file) {
+    if (typeof createImageBitmap === 'function') {
+      try {
+        const bitmap = await createImageBitmap(file);
+        try {
+          if (!bitmap.width || !bitmap.height) {
+            throw new Error(`Invalid image dimensions: ${bitmap.width}x${bitmap.height}`);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = bitmap.width;
+          canvas.height = bitmap.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('Failed to get 2D context for canvas');
+          }
+          ctx.drawImage(bitmap, 0, 0);
+          return canvas;
+        } finally {
+          if (typeof bitmap.close === 'function') {
+            bitmap.close();
+          }
+        }
+      } catch (err) {
+        // Fall through to Image element decoding.
+      }
+    }
+
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.decoding = 'async';
+      img.onload = () => {
+        try {
+          if (!img.naturalWidth || !img.naturalHeight) {
+            throw new Error(`Invalid image dimensions: ${img.naturalWidth}x${img.naturalHeight}`);
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('Failed to get 2D context for canvas');
+          }
+          ctx.drawImage(img, 0, 0);
+          resolve(canvas);
+        } catch (err) {
+          reject(new Error('Native AVIF decode failed: ' + err.message));
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error('Native AVIF decode failed'));
+      };
+      img.src = url;
     });
   }
 
@@ -147,6 +189,30 @@ class HeicDecoder {
   }
 
   /**
+   * Check if a file is AVIF format
+   * @param {File} file 
+   * @returns {boolean}
+   */
+  isAvifFile(file) {
+    if (!file || !file.name) return false;
+    
+    const name = file.name.toLowerCase();
+    const type = (file.type || '').toLowerCase();
+    
+    return type === 'image/avif' ||
+           name.endsWith('.avif');
+  }
+
+  /**
+   * Check if a file requires this decoder (HEIC or AVIF)
+   * @param {File} file 
+   * @returns {boolean}
+   */
+  isSupportedFile(file) {
+    return this.isHeicFile(file) || this.isAvifFile(file);
+  }
+
+  /**
    * Validate if file can be processed
    * @param {File} file
    * @returns {{valid: boolean, error?: string}}
@@ -156,8 +222,8 @@ class HeicDecoder {
       return { valid: false, error: 'No file provided' };
     }
     
-    if (!this.isHeicFile(file)) {
-      return { valid: false, error: 'File is not a valid HEIC/HEIF image' };
+    if (!this.isSupportedFile(file)) {
+      return { valid: false, error: 'File is not a valid HEIC/HEIF/AVIF image' };
     }
     
     // Check file size (max 100MB for safety)
