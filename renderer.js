@@ -305,6 +305,101 @@ function formatTagValue(value) {
   }
 }
 
+function normalizeExifNumber(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === 'string') {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  if (typeof value === 'object') {
+    if ('numerator' in value && 'denominator' in value) {
+      const denom = value.denominator || 1;
+      return denom ? value.numerator / denom : null;
+    }
+    if ('value' in value) {
+      return normalizeExifNumber(value.value);
+    }
+  }
+  return null;
+}
+
+function parseDmsString(value) {
+  if (!value || typeof value !== 'string') return null;
+  const parts = value.match(/-?\d+(?:\.\d+)?/g);
+  if (!parts || parts.length === 0) return null;
+  const numbers = parts.map(Number).filter((n) => Number.isFinite(n));
+  if (numbers.length === 0) return null;
+  return numbers;
+}
+
+function dmsToDecimal(dms, ref) {
+  if (!Array.isArray(dms) || dms.length === 0) return null;
+  const degrees = dms.length >= 1 ? normalizeExifNumber(dms[0]) : null;
+  const minutes = dms.length >= 2 ? normalizeExifNumber(dms[1]) : 0;
+  const seconds = dms.length >= 3 ? normalizeExifNumber(dms[2]) : 0;
+
+  if (degrees === null) return null;
+  const decimal = Math.abs(degrees) + (minutes || 0) / 60 + (seconds || 0) / 3600;
+  if (!ref) return decimal;
+  const upperRef = String(ref).toUpperCase();
+  if (upperRef === 'S' || upperRef === 'W') {
+    return -decimal;
+  }
+  return decimal;
+}
+
+function extractGpsFromTags(tags) {
+  if (!tags) return null;
+  const latTag = tags.GPSLatitude;
+  const latRefTag = tags.GPSLatitudeRef;
+  const lonTag = tags.GPSLongitude;
+  const lonRefTag = tags.GPSLongitudeRef;
+  const altTag = tags.GPSAltitude;
+  const altRefTag = tags.GPSAltitudeRef;
+
+  const latRef = latRefTag?.value || latRefTag?.description || null;
+  const lonRef = lonRefTag?.value || lonRefTag?.description || null;
+
+  let latValue = latTag?.value ?? latTag?.description ?? null;
+  let lonValue = lonTag?.value ?? lonTag?.description ?? null;
+
+  if (typeof latValue === 'string') {
+    latValue = parseDmsString(latValue) || latValue;
+  }
+  if (typeof lonValue === 'string') {
+    lonValue = parseDmsString(lonValue) || lonValue;
+  }
+
+  const latitude = Array.isArray(latValue)
+    ? dmsToDecimal(latValue, latRef)
+    : normalizeExifNumber(latValue);
+  const longitude = Array.isArray(lonValue)
+    ? dmsToDecimal(lonValue, lonRef)
+    : normalizeExifNumber(lonValue);
+
+  if (latitude === null || longitude === null) return null;
+
+  let altitude = null;
+  if (altTag?.value !== undefined) {
+    altitude = normalizeExifNumber(altTag.value ?? altTag.description);
+    const altRef = altRefTag?.value ?? altRefTag?.description ?? null;
+    if (altitude !== null && altRef !== null && Number(altRef) === 1) {
+      altitude = -Math.abs(altitude);
+    }
+  }
+
+  return {
+    latitude,
+    longitude,
+    altitude,
+    latitudeRef: latRef || null,
+    longitudeRef: lonRef || null
+  };
+}
+
 function buildTagEntry(name, tag) {
   const section = tag.section || 'General';
   const description = tag.description;
@@ -386,6 +481,7 @@ async function buildInfoPayload() {
 
   let metadata = { entries: [], total: 0 };
   let metadataError = null;
+  let gps = null;
 
   if (!ExifReader) {
     metadataError = 'ExifReader dependency is not installed.';
@@ -395,6 +491,7 @@ async function buildInfoPayload() {
       const tags = ExifReader.load(arrayBuffer);
       const entries = Object.keys(tags).map((name) => buildTagEntry(name, tags[name]));
       metadata = { entries, total: entries.length };
+      gps = extractGpsFromTags(tags);
     } catch (err) {
       metadataError = err.message || 'Failed to read metadata.';
     }
@@ -405,7 +502,8 @@ async function buildInfoPayload() {
     file: fileInfo,
     image: imageInfo,
     metadata,
-    metadataError
+    metadataError,
+    gps
   };
 
   currentInfoPayload = payload;

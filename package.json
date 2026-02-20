@@ -11,11 +11,12 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "electron": "40.4.1",
-    "@electron/rebuild": "^3.7.2"
+    "@electron/rebuild": "^3.7.2",
+    "electron": "40.4.1"
   },
   "dependencies": {
     "exifreader": "^4.36.1",
+    "leaflet": "^1.9.4",
     "libheif-js": "^1.19.8",
     "sharp": "^0.34.5"
   },

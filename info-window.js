@@ -7,6 +7,8 @@ const infoFileName = document.getElementById('infoFileName');
 const infoSearch = document.getElementById('infoSearch');
 
 let currentPayload = null;
+let mapInstance = null;
+let mapMarker = null;
 
 function escapeHtml(value) {
   return String(value)
@@ -57,6 +59,82 @@ function emptyState(message) {
       <p>${escapeHtml(message)}</p>
     </div>
   `;
+}
+
+function formatCoordinate(value, isLatitude) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return 'Unknown';
+  const absValue = Math.abs(value);
+  const hemisphere = value >= 0
+    ? (isLatitude ? 'N' : 'E')
+    : (isLatitude ? 'S' : 'W');
+  return `${absValue.toFixed(6)}° ${hemisphere}`;
+}
+
+function formatAltitude(value) {
+  if (typeof value !== 'number' || Number.isNaN(value)) return null;
+  const meters = Math.round(value * 10) / 10;
+  return `${meters} m`;
+}
+
+function buildMapSection(gps) {
+  if (!gps || typeof gps.latitude !== 'number' || typeof gps.longitude !== 'number') {
+    return '';
+  }
+  const latDisplay = formatCoordinate(gps.latitude, true);
+  const lonDisplay = formatCoordinate(gps.longitude, false);
+  const altitude = formatAltitude(gps.altitude);
+
+  return `
+    <section class="info-section info-map-section">
+      <div class="section-header">
+        <h2>Location</h2>
+        <span class="section-count">EXIF GPS</span>
+      </div>
+      <div class="info-table map-table">
+        <div class="map-canvas" id="exifMap" aria-label="Map preview"></div>
+        <div class="map-meta">
+          <div><span class="map-label">Latitude</span><span class="map-value">${escapeHtml(latDisplay)}</span></div>
+          <div><span class="map-label">Longitude</span><span class="map-value">${escapeHtml(lonDisplay)}</span></div>
+          ${altitude ? `<div><span class="map-label">Altitude</span><span class="map-value">${escapeHtml(altitude)}</span></div>` : ''}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function resetMap() {
+  if (mapInstance) {
+    mapInstance.remove();
+    mapInstance = null;
+    mapMarker = null;
+  }
+}
+
+function initMap(gps) {
+  if (!gps || typeof gps.latitude !== 'number' || typeof gps.longitude !== 'number') {
+    return;
+  }
+
+  const container = document.getElementById('exifMap');
+  if (!container || !window.L) return;
+
+  mapInstance = window.L.map(container, {
+    zoomControl: true,
+    scrollWheelZoom: false,
+    dragging: true,
+    attributionControl: true
+  });
+
+  window.L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(mapInstance);
+
+  mapInstance.setView([gps.latitude, gps.longitude], 13);
+  mapMarker = window.L.marker([gps.latitude, gps.longitude]).addTo(mapInstance);
+
+  mapInstance.whenReady(() => {
+    mapInstance.invalidateSize();
+  });
 }
 
 function filterItems(items, term) {
@@ -152,6 +230,8 @@ function render(payload) {
   infoFileName.textContent = payload.file?.name || 'Image Info';
   infoTimestamp.textContent = payload.generatedAt ? new Date(payload.generatedAt).toLocaleString() : '';
 
+  resetMap();
+
   const fileItems = formatFileSection(payload.file);
   const imageItems = formatImageSection(payload.image);
 
@@ -176,6 +256,9 @@ function render(payload) {
   const imageSection = renderSection('Image', imageItems);
   if (imageSection) sections.push(imageSection);
 
+  const mapSection = buildMapSection(payload.gps);
+  if (mapSection) sections.push(mapSection);
+
   if (payload.metadataError) {
     sections.push(renderSection('Metadata', [
       { label: 'Status', value: payload.metadataError }
@@ -193,6 +276,9 @@ function render(payload) {
   }
 
   infoContent.innerHTML = sections.join('') || emptyState('No metadata matched your filter.');
+  if (mapSection) {
+    initMap(payload.gps);
+  }
 
   const totalTags = payload.metadata?.total || 0;
   const filteredTags = metadataItems.length;
